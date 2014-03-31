@@ -1,10 +1,6 @@
-/**
- * 
- */
 package com.jernejerin;
 
 import java.net.UnknownHostException;
-import java.util.Date;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
@@ -28,28 +24,27 @@ public class RSSDelegate {
 			// we only need one instance of class MongoClient
 			// even with multiple threads
 			mongoClient = new MongoClient( "localhost" , 27017 );
-			DB db = mongoClient.getDB("rssdb");
-			DBCollection coll = db.getCollection("feeds");
+			DB rssDB = mongoClient.getDB("rssdb");
+			DBCollection rssColl = rssDB.getCollection("feeds");
+			DBCollection entriesColl = rssDB.getCollection("entries");
 			
 			// our query which returns feeds currently not used
 			BasicDBObject query = new BasicDBObject("used", 0);
 			
 			// create maximum of 100 threads
-			for (int i = 0; i < 100; i++) {
+			for (; ; ) {
 				// get the first RSS feed that is currently not used
-				DBObject feed = coll.findOne(query);
+				DBObject feed = rssColl.findOne(query);
 				
 				if (feed != null) {
 					String url = (String) feed.get("uri");
 					
-					// set the feed to used and last access time 
-					// and update it
+					// set the feed to used and update it
 					feed.put("used", 1);
-					feed.put("accessedAt", new Date());
-					coll.update(new BasicDBObject("uri", url), feed);
+					rssColl.update(new BasicDBObject("uri", url), feed);
 					
-					// start thread for given RSS url
-					new Thread(new RSSReader(url)).start();
+					// start thread for given RSS feed
+					new Thread(new RSSReader(feed, rssColl, entriesColl)).start();
 				}
 			}
 		} catch (UnknownHostException e) {

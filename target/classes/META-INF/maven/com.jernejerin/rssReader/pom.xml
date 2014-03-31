@@ -1,0 +1,26 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.jernejerin</groupId>
+  <artifactId>rssReader</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>RSS Reader</name>
+  <description>RSS Reader worker.</description>
+  <dependencies>
+  	<dependency>
+  		<groupId>net.java.dev.rome</groupId>
+  		<artifactId>rome</artifactId>
+  		<version>1.0.0</version>
+  	</dependency>
+  	<dependency>
+  		<groupId>org.mongodb</groupId>
+  		<artifactId>mongo-java-driver</artifactId>
+  		<version>2.11.4</version>
+  	</dependency>
+  </dependencies>
+  <repositories>
+    <repository>
+      <id>central.maven.org</id>
+      <url>http://central.maven.org/maven2/</url>
+    </repository>
+  </repositories>
+</project>

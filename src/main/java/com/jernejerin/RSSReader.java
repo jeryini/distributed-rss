@@ -45,8 +45,6 @@ public class RSSReader implements Runnable {
 			
 			// our input reader for rss
 			SyndFeedInput input = new SyndFeedInput();
-			BasicDBObject query;
-			DBObject entryLocal;
 			SyndFeed feed;
 			
 			while (true) {
@@ -97,7 +95,10 @@ public class RSSReader implements Runnable {
 				// text input does not exist
 				// skip hours does not exist
 				// skip days does not exist
+				ArrayList<Integer> idList = (ArrayList<Integer>)feedDB.get("entries");
 				
+				if (idList == null)
+					idList = new ArrayList<Integer>();
 				
 				// current local entries for this feed use NORMALIZED data models
 				// using One-To-Many Relationships
@@ -106,6 +107,7 @@ public class RSSReader implements Runnable {
 					// all elements of an item are optional, however at least 
 					// one of title or description must be present
 					// for inserting new entry check if that entry already exists
+					// TODO: Hash collisions! Extend to 64-bit or use SHA-1.
 					int id = 0;
 					if (entry.getUri() != null)
 						// first we check if uri (guid) is available
@@ -122,16 +124,10 @@ public class RSSReader implements Runnable {
 					// This is bad solution to query DB for each entry if it already exists
 					// query = new BasicDBObject("_id", id);
 					// entryLocal = entriesColl.findOne(query);
-					// Lets check the array of references in the feed for this id
+					// lets instead check the array of references in the feed for this id
+					// that way we save DB queries
 					
-					
-					// TODO: save reference into array of feedDB
-					// TODO: update after for each statement -> BULK UPDATE!!!
-					// TODO: what about changes in entries? HASH FUNCTIONS!!!
-					// TODO: two arrays, one for references containing uri, the other hash values of whole entry
-					
-					
-					if (!((ArrayList<Integer>)feedDB.get("entries")).contains(id)) {
+					if (!idList.contains(id)) {
 						// does not exist yet, save it to DB
 						BasicDBObject entryNew = new BasicDBObject("_id", id);
 						
@@ -166,11 +162,19 @@ public class RSSReader implements Runnable {
 							entryNew.append("guid", entry.getUri());
 						if (entry.getPublishedDate() != null)
 							entryNew.append("pubDate", entry.getPublishedDate());
+						// source?
 						
 						// insert new entry into DB
+						// TODO: update after for each statement -> BULK UPDATE!!!
 						entriesColl.insert(entryNew);
+						
+						// add id to list
+						idList.add(id);
 					}
 				}
+				
+				// set reference to feed
+				feedDB.put("entries", idList);
 				
 				// update feed which can contain new references to entries
 				// and updated feed information

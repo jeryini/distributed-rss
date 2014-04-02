@@ -21,8 +21,8 @@ public class RSSDelegate {
 	public static void main(String[] args) {
 		MongoClient mongoClient = null;
 		try {
-			// we only need one instance of class MongoClient
-			// even with multiple threads
+			// we only need one instance of these classes for MongoDB
+			// even with multiple threads -> thread safe
 			mongoClient = new MongoClient( "localhost" , 27017 );
 			DB rssDB = mongoClient.getDB("rssdb");
 			DBCollection rssColl = rssDB.getCollection("feeds");
@@ -37,11 +37,11 @@ public class RSSDelegate {
 				DBObject feed = rssColl.findOne(query);
 				
 				if (feed != null) {
-					String url = (String) feed.get("uri");
+					String feedUrl = (String) feed.get("feedUrl");
 					
 					// set the feed to used and update it
 					feed.put("used", 1);
-					rssColl.update(new BasicDBObject("uri", url), feed);
+					rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
 					
 					// start thread for given RSS feed
 					new Thread(new RSSReader(feed, rssColl, entriesColl)).start();

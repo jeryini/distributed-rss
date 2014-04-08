@@ -1,6 +1,9 @@
 package com.jernejerin;
 
 import java.net.UnknownHostException;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
@@ -14,11 +17,14 @@ import com.mongodb.MongoException;
  *
  */
 public class RSSDelegate {
-
+	// queue size for active threads
+	public static final int QUEUE_SIZE = 10;
+	
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
+		
 		MongoClient mongoClient = null;
 		try {
 			// we only need one instance of these classes for MongoDB
@@ -31,20 +37,30 @@ public class RSSDelegate {
 			// our query which returns feeds currently not used
 			BasicDBObject query = new BasicDBObject("used", 0);
 			
-			// create maximum of 100 threads
-			for (; ; ) {
-				// get the first RSS feed that is currently not used
-				DBObject feed = rssColl.findOne(query);
-				
-				if (feed != null) {
-					String feedUrl = (String) feed.get("feedUrl");
+			// create a thread pool with fixed number of threads
+			// the same as using ThreadPoolExecutor with default values
+			ThreadPoolExecutor executor = new ThreadPoolExecutor(QUEUE_SIZE, QUEUE_SIZE, 0L, 
+					TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+			
+			// check indefinetly
+			while (true) {
+				// create maximum of specified jobs
+				if (executor.getActiveCount() < QUEUE_SIZE) {
+					// get the first RSS feed that is currently not used
+					DBObject feed = rssColl.findOne(query);
 					
-					// set the feed to used and update it
-					feed.put("used", 1);
-					rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
-					
-					// start thread for given RSS feed
-					new Thread(new RSSReader(feed, rssColl, entriesColl)).start();
+					if (feed != null) {
+						String feedUrl = (String) feed.get("feedUrl");
+						
+						// set the feed to used and update it
+						// TODO: Lock it till this update?
+						feed.put("used", 1);
+						rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
+						
+						// start thread for given RSS feed
+						Runnable rssReader = new RSSReader(feed, rssColl, entriesColl);
+						executor.execute(rssReader);
+					}
 				}
 			}
 		} catch (UnknownHostException e) {

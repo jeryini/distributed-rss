@@ -12,10 +12,12 @@ import java.util.Date;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
+import com.sun.syndication.feed.synd.SyndCategory;
 import com.sun.syndication.feed.synd.SyndEnclosure;
 import com.sun.syndication.feed.synd.SyndEntry;
 import com.sun.syndication.feed.synd.SyndFeed;
 import com.sun.syndication.feed.synd.SyndImage;
+import com.sun.syndication.feed.synd.SyndPerson;
 import com.sun.syndication.io.FeedException;
 import com.sun.syndication.io.SyndFeedInput;
 import com.sun.syndication.io.XmlReader;
@@ -35,10 +37,11 @@ public class RSSReader implements Runnable {
 		this.entriesColl = entriesColl;
 	}
 
-	@SuppressWarnings({ "unchecked", "rawtypes" })
+	//@SuppressWarnings({ "unchecked", "rawtypes" })
 	/**
 	 * Check for new entries every second for one feed infinite times.
 	 */
+	@SuppressWarnings("unchecked")
 	public void run() {
 		try {
 			URL feedUrl = new URL((String) feedDB.get("feedUrl"));
@@ -57,10 +60,15 @@ public class RSSReader implements Runnable {
 				feedDB.put("accessedAt", new Date());
 				
 				// REQUIRED channel elements as defined in RSS 2.0 Specification
-				// http://cyber.law.harvard.edu/rss/rss.html
-				feedDB.put("title", feed.getTitle());
-				feedDB.put("link", feed.getLink());
-				feedDB.put("description", feed.getDescription());
+				// http://cyber.law.harvard.edu/rss/rss.html#
+				// even though this elements are required by specification we 
+				// cannot trust users
+				if (feed.getTitle() != null)
+					feedDB.put("title", feed.getTitle());
+				if (feed.getLink() != null)
+					feedDB.put("link", feed.getLink());
+				if (feed.getDescription() != null)
+					feedDB.put("description", feed.getDescription());
 				
 				// OPTIONAL channel elements as defined in RSS 2.0 Specification
 				if (feed.getLanguage() != null)
@@ -69,13 +77,35 @@ public class RSSReader implements Runnable {
 					feedDB.put("copyright", feed.getCopyright());
 				// no specific get method for managing editor and web master. Using
 				// authors instead
-				if (feed.getAuthors() != null && feed.getAuthors().size() > 0)
-					feedDB.put("authors", feed.getAuthors());
+				if (feed.getAuthors() != null && feed.getAuthors().size() > 0) {
+					ArrayList<BasicDBObject> authors = new ArrayList<BasicDBObject>();
+					for (SyndPerson author : (ArrayList<SyndPerson>) feed.getAuthors()) {
+						BasicDBObject authorDB = new BasicDBObject();
+						
+						if (author.getName() != null)
+							authorDB.append("name", author.getName());
+						if (author.getUri() != null)
+							authorDB.append("uri", author.getUri());
+						authors.add(authorDB);
+					}
+					feedDB.put("authors", authors);
+				}
 				if (feed.getPublishedDate() != null)
 					feedDB.put("pubDate", feed.getPublishedDate());
 				// last build date does not exist
-				if (feed.getCategories() != null && feed.getCategories().size() > 0)
-					feedDB.put("category", feed.getCategories());
+				if (feed.getCategories() != null && feed.getCategories().size() > 0) {
+					ArrayList<BasicDBObject> categories = new ArrayList<BasicDBObject>();
+					for (SyndCategory category : (ArrayList<SyndCategory>) feed.getCategories()) {
+						BasicDBObject categoryDB = new BasicDBObject();
+						
+						if (category.getName() != null)
+							categoryDB.append("name", category.getName());
+						if (category.getTaxonomyUri() != null)
+							categoryDB.append("taxonomyURI", category.getTaxonomyUri());
+						categories.add(categoryDB);
+					}
+					feedDB.put("category", categories);
+				}
 				// generator does not exist
 				// docs does not exist
 				// cloud does not exist
@@ -95,7 +125,7 @@ public class RSSReader implements Runnable {
 				// text input does not exist
 				// skip hours does not exist
 				// skip days does not exist
-				ArrayList<Integer> idList = (ArrayList<Integer>)feedDB.get("entries");
+				ArrayList<Integer> idList = (ArrayList<Integer>) feedDB.get("entries");
 				
 				if (idList == null)
 					idList = new ArrayList<Integer>();
@@ -103,6 +133,7 @@ public class RSSReader implements Runnable {
 				// current local entries for this feed use NORMALIZED data models
 				// using One-To-Many Relationships
 				// reason: http://blog.mongolab.com/2013/04/thinking-about-arrays-in-mongodb/
+				ArrayList<DBObject> entriesDBNew = new ArrayList<DBObject>();
 				for (SyndEntry entry : (ArrayList<SyndEntry>) feed.getEntries()) {
 					// all elements of an item are optional, however at least 
 					// one of title or description must be present
@@ -129,21 +160,43 @@ public class RSSReader implements Runnable {
 					
 					if (!idList.contains(id)) {
 						// does not exist yet, save it to DB
-						BasicDBObject entryNew = new BasicDBObject("_id", id);
+						BasicDBObject entryDBNew = new BasicDBObject("_id", id);
 						
 						if (entry.getTitle() != null)
-							entryNew.append("title", entry.getTitle());
+							entryDBNew.append("title", entry.getTitle());
 						if (entry.getLink() != null)
-							entryNew.append("link", entry.getLink());
+							entryDBNew.append("link", entry.getLink());
 						if (entry.getDescription() != null)
-							entryNew.append("description", entry.getDescription().getValue());
-						if (entry.getAuthors() != null && entry.getAuthors().size() > 0)
-							entryNew.append("authors", entry.getAuthors());
-						if (entry.getCategories() != null && entry.getCategories().size() > 0)
-							entryNew.append("categories", entry.getCategories());
+							entryDBNew.append("description", entry.getDescription().getValue());
+						if (entry.getAuthors() != null && entry.getAuthors().size() > 0) {
+							ArrayList<BasicDBObject> authors = new ArrayList<BasicDBObject>();
+							for (SyndPerson author : (ArrayList<SyndPerson>) entry.getAuthors()) {
+								BasicDBObject authorDB = new BasicDBObject();
+								
+								if (author.getName() != null)
+									authorDB.append("name", author.getName());
+								if (author.getUri() != null)
+									authorDB.append("uri", author.getUri());
+								authors.add(authorDB);
+							}
+							entryDBNew.put("authors", authors);
+						}
+						if (entry.getCategories() != null && entry.getCategories().size() > 0) {
+							ArrayList<BasicDBObject> categories = new ArrayList<BasicDBObject>();
+							for (SyndCategory category : (ArrayList<SyndCategory>) entry.getCategories()) {
+								BasicDBObject categoryDB = new BasicDBObject();
+								
+								if (category.getName() != null)
+									categoryDB.append("name", category.getName());
+								if (category.getTaxonomyUri() != null)
+									categoryDB.append("taxonomyURI", category.getTaxonomyUri());
+								categories.add(categoryDB);
+							}
+							entryDBNew.append("categories", categories);
+						}
 						// comments does not exist
 						if (entry.getEnclosures() != null && entry.getEnclosures().size() > 0) {
-							ArrayList enclosures = new ArrayList();
+							ArrayList<BasicDBObject> enclosures = new ArrayList<BasicDBObject>();
 							for (SyndEnclosure enclosure : (ArrayList<SyndEnclosure>) entry.getEnclosures()) {
 								BasicDBObject enclosureDB = new BasicDBObject();
 								
@@ -156,25 +209,26 @@ public class RSSReader implements Runnable {
 									enclosureDB.append("type", enclosure.getType());
 								enclosures.add(enclosureDB);
 							}
-							entryNew.append("enclosure", enclosures);
+							entryDBNew.append("enclosure", enclosures);
 						}
 						if (entry.getUri() != null)
-							entryNew.append("guid", entry.getUri());
+							entryDBNew.append("guid", entry.getUri());
 						if (entry.getPublishedDate() != null)
-							entryNew.append("pubDate", entry.getPublishedDate());
+							entryDBNew.append("pubDate", entry.getPublishedDate());
 						// source?
 						
-						// insert new entry into DB
-						// TODO: update after for each statement -> BULK UPDATE!!!
-						entriesColl.insert(entryNew);
+						// insert new entry into list
+						entriesDBNew.add(entryDBNew);
 						
 						// add id to list
 						idList.add(id);
 					}
 				}
-				
 				// set reference to feed
 				feedDB.put("entries", idList);
+				
+				// bulk inset new entries
+				entriesColl.insert(entriesDBNew);
 				
 				// update feed which can contain new references to entries
 				// and updated feed information
@@ -186,17 +240,17 @@ public class RSSReader implements Runnable {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		} catch (MalformedURLException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IllegalArgumentException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (FeedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
+		} finally {
+			// this feed is not used anymore
+			feedDB.put("used", 0);
+			rssColl.update(new BasicDBObject("feedUrl", feedDB.get("feedUrl")), feedDB);
 		}
 	}
 }

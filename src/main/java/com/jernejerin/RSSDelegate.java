@@ -1,9 +1,15 @@
+/**
+ * 
+ */
 package com.jernejerin;
 
 import java.net.UnknownHostException;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.Date;
+
+import javax.jms.*;
+
+import org.apache.activemq.ActiveMQConnection;
+import org.apache.activemq.ActiveMQConnectionFactory;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
@@ -13,56 +19,79 @@ import com.mongodb.MongoClient;
 import com.mongodb.MongoException;
 
 /**
+ * This class represents Apache ActiveMQ
+ * worker that delegates RSS feeds to main
+ * RSS workers.
+ * 
  * @author Jernej Jerin
  *
  */
 public class RSSDelegate {
-	// queue size for active threads
-	public static final int QUEUE_SIZE = 10;
+	// default broker URL which means that JMS server is
+	// on localhost
+	private static String url = ActiveMQConnection.DEFAULT_BROKER_URL;
 	
+	// name of the queue to whom we will be sending messages
+	private static String subject = "RSSFEEDSQUEUE";
+
 	/**
 	 * @param args
+	 * @throws JMSException 
 	 */
-	public static void main(String[] args) {
-		
+	public static void main(String[] args) throws JMSException {
 		MongoClient mongoClient = null;
+		Connection conn = null;
 		try {
+			// implemented PointToPoint model because we
+			// want only one of the consumers (RSSMainWorkers)
+			// to receive the message
+			
 			// we only need one instance of these classes for MongoDB
 			// even with multiple threads -> thread safe
 			mongoClient = new MongoClient( "localhost" , 27017 );
 			DB rssDB = mongoClient.getDB("rssdb");
 			DBCollection rssColl = rssDB.getCollection("feeds");
-			DBCollection entriesColl = rssDB.getCollection("entries");
 			
-			// our query which returns feeds currently not used
-			BasicDBObject query = new BasicDBObject("used", 0);
+			// two queries, the first one returns feeds currently not used
+			BasicDBObject queryFeedsUsed = new BasicDBObject("used", 0);
 			
-			// create a thread pool with fixed number of threads
-			// the same as using ThreadPoolExecutor with default values
-			ThreadPoolExecutor executor = new ThreadPoolExecutor(QUEUE_SIZE, QUEUE_SIZE, 0L, 
-					TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+			// connection to JMS server
+			ConnectionFactory connFac = new ActiveMQConnectionFactory(url);
+			conn = connFac.createConnection();
+			conn.start();
 			
-			// check indefinetly
+			// create a non-transactional session for sending messages
+			Session sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
+			
+			// destination is our queue on JMS
+			Destination dest = sess.createQueue(subject);
+			
+			// producer for sending messages
+			MessageProducer msgProd = sess.createProducer(dest);
+			
+			// indefinetly check for feeds not in use
 			while (true) {
-				// create maximum of specified jobs
-				if (executor.getActiveCount() < QUEUE_SIZE) {
-					// get the first RSS feed that is currently not used
-					DBObject feed = rssColl.findOne(query);
-					
-					if (feed != null) {
-						String feedUrl = (String) feed.get("feedUrl");
-						
-						// set the feed to used and update it
-						// TODO: Lock it till this update?
-						feed.put("used", 1);
-						rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
-						
-						// start thread for given RSS feed
-						Runnable rssReader = new RSSReader(feed, rssColl, entriesColl);
-						executor.execute(rssReader);
-					}
-				}
+				// first query for feeds currently not used
+				// get the available RSS feed from the message queue
+				// get the first RSS feed that is currently not used
+				DBObject feed = rssColl.findOne(queryFeedsUsed);
+				
+				if (feed != null)
+					sendMessage(feed, rssColl, msgProd, sess);
+				
+				// the second query returns feeds that have not been used
+				// in the past 5 minutes. This is a backup option.
+				BasicDBObject queryLastAccessed = new BasicDBObject("accessedAt", 
+						new BasicDBObject("$lt", new Date(System.currentTimeMillis() - 60 * 5 * 1000)));
+				feed = rssColl.findOne(queryLastAccessed);
+				
+				if (feed != null)
+					sendMessage(feed, rssColl, msgProd, sess);
+				
 			}
+		} catch (JMSException e) {
+			System.err.println("Problem with JMS broker.");
+			e.printStackTrace();
 		} catch (UnknownHostException e) {
 			System.err.println("Problem with database host.");
 			e.printStackTrace();
@@ -72,8 +101,33 @@ public class RSSDelegate {
 		} catch (IllegalThreadStateException e) {
 			System.err.println("Problem with threading.");
 		} finally {
+			// close connections to mongodb and JMS
+			conn.close();
 			mongoClient.close();
 		}
 	}
-
+	
+	/**
+	 * Update the feed as used and send it to the queue.
+	 * 
+	 * @param feed
+	 * @param rssColl
+	 * @param msgProd
+	 * @param sess
+	 * @throws JMSException
+	 */
+	private static void sendMessage(DBObject feed, DBCollection rssColl, 
+			MessageProducer msgProd, Session sess) throws JMSException {
+		String feedUrl = (String) feed.get("feedUrl");
+		
+		// set the feed to used and update it
+		// TODO: Add accessed datetime
+		feed.put("used", 1);
+		rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
+		
+		// send feed in the message to the queue
+		TextMessage txtMsg = sess.createTextMessage(feed.toString());
+		msgProd.send(txtMsg);
+		System.out.println("Message sent '" + txtMsg.getText() + "'");
+	}
 }

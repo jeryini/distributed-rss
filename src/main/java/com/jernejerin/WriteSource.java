@@ -42,6 +42,7 @@ public class WriteSource {
 				// we also need to set used parameter to 0
 				BasicDBObject feedNew = new BasicDBObject("feedUrl", line).append("used", 0);
 				rssColl.insert(feedNew);
+				break;
 			}
 			
 			br.close();

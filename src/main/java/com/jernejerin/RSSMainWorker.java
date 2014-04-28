@@ -5,12 +5,17 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import com.mongodb.BasicDBObject;
+import javax.jms.*;
+
+import org.apache.activemq.ActiveMQConnection;
+import org.apache.activemq.ActiveMQConnectionFactory;
+
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoException;
+import com.mongodb.util.JSON;
 
 /**
  * This worker represent single virtual machine.
@@ -22,12 +27,20 @@ public class RSSMainWorker {
 	// queue size for active threads
 	public static final int QUEUE_SIZE = 1000;
 	
+	// default broker URL which means that JMS server is
+	// on localhost
+	private static String url = ActiveMQConnection.DEFAULT_BROKER_URL;
+	
+	// name of the queue from whom we will be receiving messages
+	private static String subject = "RSSFEEDSQUEUE";
+	
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
 		
 		MongoClient mongoClient = null;
+		Connection conn = null;
 		try {
 			// we only need one instance of these classes for MongoDB
 			// even with multiple threads -> thread safe
@@ -36,8 +49,19 @@ public class RSSMainWorker {
 			DBCollection rssColl = rssDB.getCollection("feeds");
 			DBCollection entriesColl = rssDB.getCollection("entries");
 			
-			// our query which returns feeds currently not used
-			BasicDBObject query = new BasicDBObject("used", 0);
+			// connection to JMS server
+			ConnectionFactory connFac = new ActiveMQConnectionFactory(url);
+			conn = connFac.createConnection();
+			conn.start();
+			
+			// create a non-transactional session for sending messages
+			Session sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
+			
+			// destination is our queue on JMS
+			Destination dest = sess.createQueue(subject);
+			
+			// consumer for receiving messages
+			MessageConsumer msgCons = sess.createConsumer(dest);
 			
 			// create a thread pool with fixed number of threads
 			// the same as using ThreadPoolExecutor with default values
@@ -49,16 +73,15 @@ public class RSSMainWorker {
 				// create maximum of specified jobs
 				if (executor.getActiveCount() < QUEUE_SIZE) {
 					// get the available RSS feed from the message queue
-					// get the first RSS feed that is currently not used
-					DBObject feed = rssColl.findOne(query);
+					// this call is blocking!
+					Message msg = msgCons.receive();
 					
-					if (feed != null) {
-						String feedUrl = (String) feed.get("feedUrl");
+					if (msg instanceof TextMessage) {
+						TextMessage txtMsg = (TextMessage) msg;
 						
-						// set the feed to used and update it
-						feed.put("used", 1);
-						rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
-						
+						// parse it from JSON to DBObject
+						DBObject feed = (DBObject) JSON.parse(txtMsg.getText());
+		
 						// start thread for given RSS feed
 						Runnable rssThreadWorker = new RSSThreadWorker(feed, rssColl, entriesColl);
 						executor.execute(rssThreadWorker);
@@ -73,6 +96,9 @@ public class RSSMainWorker {
 			e.printStackTrace();
 		} catch (IllegalThreadStateException e) {
 			System.err.println("Problem with threading.");
+		} catch (JMSException e) {
+			System.err.println("Problem with JMS.");
+			e.printStackTrace();
 		} finally {
 			mongoClient.close();
 		}

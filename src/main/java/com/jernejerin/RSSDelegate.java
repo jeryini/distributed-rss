@@ -35,6 +35,9 @@ public class RSSDelegate {
 	private static String subject = "RSSFEEDSQUEUE";
 
 	/**
+	 * Implemented PointToPoint model because we 
+	 * want only one of the consumers (RSSMainWorker)
+	 * to receive the message.
 	 * @param args
 	 * @throws JMSException 
 	 */
@@ -42,9 +45,7 @@ public class RSSDelegate {
 		MongoClient mongoClient = null;
 		Connection conn = null;
 		try {
-			// implemented PointToPoint model because we
-			// want only one of the consumers (RSSMainWorkers)
-			// to receive the message
+			// 
 			
 			// we only need one instance of these classes for MongoDB
 			// even with multiple threads -> thread safe
@@ -120,8 +121,8 @@ public class RSSDelegate {
 			MessageProducer msgProd, Session sess) throws JMSException {
 		String feedUrl = (String) feed.get("feedUrl");
 		
-		// set the feed to used and update it
-		// TODO: Add accessed datetime
+		// update the used field and the last accessed date time field
+		feed.put("accessedAt", new Date());
 		feed.put("used", 1);
 		rssColl.update(new BasicDBObject("feedUrl", feedUrl), feed);
 		

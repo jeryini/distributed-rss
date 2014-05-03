@@ -20,8 +20,7 @@ import com.mongodb.MongoException;
 
 /**
  * This class represents Apache ActiveMQ
- * worker that delegates RSS feeds to main
- * RSS workers.
+ * worker that delegates RSS feeds to queue.
  * 
  * @author Jernej Jerin
  *
@@ -29,10 +28,13 @@ import com.mongodb.MongoException;
 public class RSSDelegate {
 	// default broker URL which means that JMS server is
 	// on localhost
-	private static String url = ActiveMQConnection.DEFAULT_BROKER_URL;
+	public static String url = ActiveMQConnection.DEFAULT_BROKER_URL;
 	
 	// name of the queue to whom we will be sending messages
-	private static String subject = "RSSFEEDSQUEUE";
+	public static String subject = "RSSFEEDSQUEUE";
+	
+	// the time for checking for feeds that have not been used
+	public static int seconds = 300;
 
 	/**
 	 * Implemented PointToPoint model because we 
@@ -45,8 +47,6 @@ public class RSSDelegate {
 		MongoClient mongoClient = null;
 		Connection conn = null;
 		try {
-			// 
-			
 			// we only need one instance of these classes for MongoDB
 			// even with multiple threads -> thread safe
 			mongoClient = new MongoClient( "localhost" , 27017 );
@@ -54,7 +54,8 @@ public class RSSDelegate {
 			DBCollection rssColl = rssDB.getCollection("feeds");
 			
 			// two queries, the first one returns feeds currently not used
-			BasicDBObject queryFeedsUsed = new BasicDBObject("used", 0);
+			// and the second is for querying the feeds not used in last 5 minutes
+			BasicDBObject queryFeedsUsed = new BasicDBObject("used", 0), queryLastAccessed = null;
 			
 			// connection to JMS server
 			ConnectionFactory connFac = new ActiveMQConnectionFactory(url);
@@ -72,24 +73,9 @@ public class RSSDelegate {
 			
 			// indefinetly check for feeds not in use
 			while (true) {
-				// first query for feeds currently not used
-				// get the available RSS feed from the message queue
-				// get the first RSS feed that is currently not used
-				DBObject feed = rssColl.findOne(queryFeedsUsed);
-				
-				if (feed != null)
-					sendMessage(feed, rssColl, msgProd, sess);
-				
-				// the second query returns feeds that have not been used
-				// in the past 5 minutes. This is a backup option.
-				BasicDBObject queryLastAccessed = new BasicDBObject("accessedAt", 
-						new BasicDBObject("$lt", new Date(System.currentTimeMillis() - 60 * 5 * 1000)));
-				feed = rssColl.findOne(queryLastAccessed);
-				
-				if (feed != null)
-					sendMessage(feed, rssColl, msgProd, sess);
-				
+				checkFeeds(queryFeedsUsed, queryLastAccessed, rssColl, msgProd, sess);
 			}
+			
 		} catch (JMSException e) {
 			System.err.println("Problem with JMS broker.");
 			e.printStackTrace();
@@ -109,7 +95,41 @@ public class RSSDelegate {
 	}
 	
 	/**
-	 * Update the feed as used and send it to the queue.
+	 * Check for feeds not used or not being accessed
+	 * in last n seconds and then send message to the queue.
+	 * 
+	 * @param queryFeedsUsed
+	 * @param queryLastAccessed
+	 * @param rssColl
+	 * @param msgProd
+	 * @param sess
+	 * @throws JMSException
+	 */
+	public static void checkFeeds(BasicDBObject queryFeedsUsed,
+		BasicDBObject queryLastAccessed, DBCollection rssColl,
+		MessageProducer msgProd, Session sess) throws JMSException {
+	
+		// get the first RSS feed that is currently not used
+		DBObject feed = rssColl.findOne(queryFeedsUsed);
+		
+		if (feed != null)
+			sendMessage(feed, rssColl, msgProd, sess);
+		
+		// the second query returns feeds that have not been used
+		// in the past n seconds (n * 1000). This is a backup option 
+		// in case that RSSThreadWorker shuts down unexpectedly and is not able to
+		// write back the attribute used to 0.
+		queryLastAccessed = new BasicDBObject("accessedAt", 
+				new BasicDBObject("$lt", new Date(System.currentTimeMillis() - seconds * 1000)));
+		feed = rssColl.findOne(queryLastAccessed);
+		
+		if (feed != null)
+			sendMessage(feed, rssColl, msgProd, sess);
+	}
+
+	/**
+	 * Update the feed attributes (accessedAt, used) and send it to the queue 
+	 * for the RSSMainWorker to pick it up.
 	 * 
 	 * @param feed
 	 * @param rssColl
@@ -117,7 +137,7 @@ public class RSSDelegate {
 	 * @param sess
 	 * @throws JMSException
 	 */
-	private static void sendMessage(DBObject feed, DBCollection rssColl, 
+	public static void sendMessage(DBObject feed, DBCollection rssColl, 
 			MessageProducer msgProd, Session sess) throws JMSException {
 		String feedUrl = (String) feed.get("feedUrl");
 		

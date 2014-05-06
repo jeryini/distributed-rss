@@ -72,7 +72,7 @@ public class RSSDelegateTest {
 			queryFeedsUsed = new BasicDBObject("used", 0);
 			
 			// connection to JMS server
-			ConnectionFactory connFac = new ActiveMQConnectionFactory(RSSDelegate.url);
+			ConnectionFactory connFac = new ActiveMQConnectionFactory(RSSDelegate.URL);
 			conn = connFac.createConnection();
 			conn.start();
 			

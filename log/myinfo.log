@@ -4476,3 +4476,101 @@
 2014-05-06/18:10:39.657  INFO: jernejerin.RSSMainWorker - New thread started for feed http://content.dealnews.com/dealmac/rss/todays-edition.xml
 2014-05-06/18:10:42.267  INFO: jernejerin.RSSMainWorker - New thread available.
 2014-05-06/18:10:43.407  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/10:24:23.387  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/10:24:23.551  INFO: jernejerin.RSSDelegate - Feed http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml not used.
+2014-05-09/10:24:23.574  INFO: jernejerin.RSSDelegate - Message sent '{ "_id" : { "$oid" : "536c90b7a8595d749add6cf4"} , "feedUrl" : "http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T08:24:23.551Z"}}'
+2014-05-09/10:24:23.579  INFO: jernejerin.RSSDelegate - Feed http://100meterijs.wordpress.com/feed/ has not been updated in last 300s.
+2014-05-09/10:24:23.591  INFO: jernejerin.RSSDelegate - Message sent '{ "_id" : { "$oid" : "536c90b7a8595d749add6cf5"} , "feedUrl" : "http://100meterijs.wordpress.com/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T08:24:23.580Z"}}'
+2014-05-09/10:24:23.607  INFO: jernejerin.RSSDelegate - Message sent '{ "_id" : { "$oid" : "536c90b7a8595d749add6cf7"} , "feedUrl" : "http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T08:24:23.601Z"}}'
+2014-05-09/10:24:23.740  WARN: failover.FailoverTransport - Transport (tcp://localhost/127.0.0.1:61616@43059) failed, reason:  , attempting to automatically reconnect
+java.io.EOFException
+	at java.io.DataInputStream.readInt(Unknown Source)
+	at org.apache.activemq.openwire.OpenWireFormat.unmarshal(OpenWireFormat.java:275)
+	at org.apache.activemq.transport.tcp.TcpTransport.readCommand(TcpTransport.java:221)
+	at org.apache.activemq.transport.tcp.TcpTransport.doRun(TcpTransport.java:213)
+	at org.apache.activemq.transport.tcp.TcpTransport.run(TcpTransport.java:196)
+	at java.lang.Thread.run(Unknown Source)
+2014-05-09/12:53:28.952  INFO: test.InsertTestResources - Created connection to MongoDB.
+2014-05-09/12:53:28.977  INFO: test.InsertTestResources - Purged the DB.
+2014-05-09/12:53:29.058  INFO: test.InsertTestResources - Inserted new random feed into DB.
+2014-05-09/12:53:29.067  INFO: test.InsertTestResources - Closed connection to DB.
+2014-05-09/12:53:59.938  INFO: jernejerin.RSSMainWorker - Created connection to MongoDB.
+2014-05-09/12:54:00.193  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/12:54:00.221  INFO: jernejerin.RSSMainWorker - Created connection to ActiveMQ.
+2014-05-09/12:54:00.274  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/12:54:35.261  INFO: jernejerin.RSSDelegateWorker - Created connection to MongoDB.
+2014-05-09/12:54:35.483  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/12:54:35.510  INFO: jernejerin.RSSDelegateWorker - Created connection to ActiveMQ.
+2014-05-09/12:54:35.566  INFO: jernejerin.RSSDelegateWorker - Feed http://onthewight.com/feed/ not used.
+2014-05-09/12:54:35.598  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb3a9e4591aff9bcaeb60"} , "feedUrl" : "http://onthewight.com/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T10:54:35.567Z"}}'
+2014-05-09/12:54:35.616  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/12:54:35.659  INFO: jernejerin.RSSMainWorker - New thread started for feed http://onthewight.com/feed/
+2014-05-09/12:54:35.660  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/12:54:59.360  INFO: jernejerin.RSSThreadWorker - Successfully read feed http://onthewight.com/feed/
+2014-05-09/12:59:35.568  INFO: jernejerin.RSSDelegateWorker - Feed http://onthewight.com/feed/ has not been updated in last 300s.
+2014-05-09/12:59:35.575  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb3a9e4591aff9bcaeb60"} , "feedUrl" : "http://onthewight.com/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T10:59:35.568Z"}}'
+2014-05-09/12:59:35.578  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/12:59:35.580  INFO: jernejerin.RSSMainWorker - New thread started for feed http://onthewight.com/feed/
+2014-05-09/12:59:35.581  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/13:00:11.692  INFO: jernejerin.RSSDelegateWorker - Feed http://onthewight.com/feed/ has not been updated in last 300s.
+2014-05-09/13:00:11.701  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/13:00:11.702  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb3a9e4591aff9bcaeb60"} , "feedUrl" : "http://onthewight.com/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T11:00:11.693Z"} , "title" : "Isle of Wight News from On The Wight" , "link" : "http://onthewight.com" , "description" : "Isle of Wight News" , "language" : "en-US" , "pubDate" : { "$date" : "2014-05-09T10:06:28.000Z"} , "entries" : [ <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data>]}'
+2014-05-09/13:00:11.737  INFO: jernejerin.RSSMainWorker - Closed connection to MongoDB and ActiveMQ
+2014-05-09/13:05:11.694  INFO: jernejerin.RSSDelegateWorker - Feed http://onthewight.com/feed/ has not been updated in last 300s.
+2014-05-09/13:05:11.701  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb3a9e4591aff9bcaeb60"} , "feedUrl" : "http://onthewight.com/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T11:05:11.695Z"} , "title" : "Isle of Wight News from On The Wight" , "link" : "http://onthewight.com" , "description" : "Isle of Wight News" , "language" : "en-US" , "pubDate" : { "$date" : "2014-05-09T10:06:28.000Z"} , "entries" : [ <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data>]}'
+2014-05-09/13:07:43.315  INFO: jernejerin.RSSMainWorker - Created connection to MongoDB.
+2014-05-09/13:07:43.631  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/13:07:43.679  INFO: jernejerin.RSSMainWorker - Created connection to ActiveMQ.
+2014-05-09/13:07:43.740  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/13:07:43.767  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/13:07:43.810  WARN: failover.FailoverTransport - Transport (tcp://localhost/127.0.0.1:61616@47248) failed, reason:  , attempting to automatically reconnect
+java.io.EOFException
+	at java.io.DataInputStream.readInt(Unknown Source)
+	at org.apache.activemq.openwire.OpenWireFormat.unmarshal(OpenWireFormat.java:275)
+	at org.apache.activemq.transport.tcp.TcpTransport.readCommand(TcpTransport.java:221)
+	at org.apache.activemq.transport.tcp.TcpTransport.doRun(TcpTransport.java:213)
+	at org.apache.activemq.transport.tcp.TcpTransport.run(TcpTransport.java:196)
+	at java.lang.Thread.run(Unknown Source)
+2014-05-09/13:07:43.816  INFO: jernejerin.RSSMainWorker - Closed connection to MongoDB and ActiveMQ
+2014-05-09/13:11:11.400  INFO: jernejerin.RSSDelegateWorker - Created connection to MongoDB.
+2014-05-09/13:11:11.631  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/13:11:11.665  INFO: jernejerin.RSSDelegateWorker - Created connection to ActiveMQ.
+2014-05-09/13:11:11.726  INFO: jernejerin.RSSDelegateWorker - Feed http://onthewight.com/feed/ has not been updated in last 300s.
+2014-05-09/13:11:11.761  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb3a9e4591aff9bcaeb60"} , "feedUrl" : "http://onthewight.com/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T11:11:11.726Z"} , "title" : "Isle of Wight News from On The Wight" , "link" : "http://onthewight.com" , "description" : "Isle of Wight News" , "language" : "en-US" , "pubDate" : { "$date" : "2014-05-09T10:06:28.000Z"} , "entries" : [ <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data> , <Binary Data>]}'
+2014-05-09/13:11:44.864  INFO: jernejerin.RSSMainWorker - Created connection to MongoDB.
+2014-05-09/13:11:45.087  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/13:11:45.115  INFO: jernejerin.RSSMainWorker - Created connection to ActiveMQ.
+2014-05-09/13:11:45.165  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/13:11:45.172  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/13:11:45.195  WARN: failover.FailoverTransport - Transport (tcp://localhost/127.0.0.1:61616@47332) failed, reason:  , attempting to automatically reconnect
+java.io.EOFException
+	at java.io.DataInputStream.readInt(Unknown Source)
+	at org.apache.activemq.openwire.OpenWireFormat.unmarshal(OpenWireFormat.java:275)
+	at org.apache.activemq.transport.tcp.TcpTransport.readCommand(TcpTransport.java:221)
+	at org.apache.activemq.transport.tcp.TcpTransport.doRun(TcpTransport.java:213)
+	at org.apache.activemq.transport.tcp.TcpTransport.run(TcpTransport.java:196)
+	at java.lang.Thread.run(Unknown Source)
+2014-05-09/13:11:45.196  INFO: jernejerin.RSSMainWorker - Closed connection to MongoDB and ActiveMQ
+2014-05-09/13:12:26.889  INFO: test.InsertTestResources - Created connection to MongoDB.
+2014-05-09/13:12:26.917  INFO: test.InsertTestResources - Purged the DB.
+2014-05-09/13:12:27.004  INFO: test.InsertTestResources - Inserted new random feed into DB.
+2014-05-09/13:12:27.006  INFO: test.InsertTestResources - Closed connection to DB.
+2014-05-09/13:12:41.438  INFO: jernejerin.RSSDelegateWorker - Created connection to MongoDB.
+2014-05-09/13:12:41.665  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/13:12:41.693  INFO: jernejerin.RSSDelegateWorker - Created connection to ActiveMQ.
+2014-05-09/13:12:41.750  INFO: jernejerin.RSSDelegateWorker - Feed http://mediasocial.co.nz/feed/ not used.
+2014-05-09/13:12:41.771  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb81ae45912d099166c83"} , "feedUrl" : "http://mediasocial.co.nz/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T11:12:41.750Z"}}'
+2014-05-09/13:12:49.168  INFO: jernejerin.RSSMainWorker - Created connection to MongoDB.
+2014-05-09/13:12:49.398  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/13:12:49.429  INFO: jernejerin.RSSMainWorker - Created connection to ActiveMQ.
+2014-05-09/13:12:49.485  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/13:12:49.496  INFO: jernejerin.RSSMainWorker - Received new job from queue.
+2014-05-09/13:12:49.537  INFO: jernejerin.RSSMainWorker - New thread started for feed http://mediasocial.co.nz/feed/
+2014-05-09/13:12:49.537  INFO: jernejerin.RSSMainWorker - New thread available.
+2014-05-09/13:13:08.325  INFO: jernejerin.RSSThreadWorker - Successfully read feed http://mediasocial.co.nz/feed/
+2014-05-09/13:17:02.541  INFO: jernejerin.RSSThreadWorker - Successfully read feed http://mediasocial.co.nz/feed/
+2014-05-09/13:22:08.935  INFO: jernejerin.RSSDelegateWorker - Created connection to MongoDB.
+2014-05-09/13:22:09.170  INFO: failover.FailoverTransport - Successfully connected to tcp://localhost:61616
+2014-05-09/13:22:09.193  INFO: jernejerin.RSSDelegateWorker - Created connection to ActiveMQ.
+2014-05-09/13:22:09.264  INFO: jernejerin.RSSDelegateWorker - Feed http://mediasocial.co.nz/feed/ has not been updated in last 300s.
+2014-05-09/13:22:09.293  INFO: jernejerin.RSSDelegateWorker - Message sent '{ "_id" : { "$oid" : "536cb81ae45912d099166c83"} , "feedUrl" : "http://mediasocial.co.nz/feed/" , "used" : 1 , "accessedAt" : { "$date" : "2014-05-09T11:22:09.264Z"} , "title" : "Net Branding" , "link" : "http://netbranding.co.nz" , "description" : "Internet Branding & Social Marketing - The Social Media Coach" , "language" : "en-US" , "pubDate" : { "$date" : "2014-05-03T20:04:26.000Z"} , "entries" : [ "37a7397b92516b3801b4c55fd8727ef4f4a46e15" , "3abebd82c4bcfc81d2d54c51caccc65982cbd415" , "863f5daa40433372cbc523cd7d9b5fa4c1f4107b" , "0438ddaa2268e3944bf42d452f02c27c7fd51160" , "eb4fed491d9936d53780548383ee6030b4c19481" , "31c93174eec850a7325071cc8b2a34734aacc3bf" , "9a97a9bbf1e623f48d301bb954a2e1c3501d4388" , "933450aad7d50fb5382dca6a4c1a2f8602b5a249" , "131c112f57d22e0093a80dc4e230cd37bb06a02c" , "83bcbace1051547a63dbf78da2a4533b466d6cba"]}'

@@ -25,7 +25,8 @@ import com.mongodb.util.JSON;
 
 /**
  * This class represents main worker for a single virtual machine. It dequeues
- * messages from queue and creates thread for each RSS feed.
+ * messages from queue and creates thread for each RSS feed. This thread then
+ * process the feed checking for new entries and other data pertaining the feed.
  * 
  * @author Jernej Jerin
  * @version 1.0
@@ -41,7 +42,7 @@ public class RSSMainWorker {
 
 	// name of the queue from whom we will be receiving messages
 	private static final String SUBJECT = "RSSFEEDSQUEUE";
-	
+
 	// logger for this class
 	static Logger logger = Logger.getLogger(RSSMainWorker.class);
 
@@ -49,7 +50,7 @@ public class RSSMainWorker {
 	 * Checks for available threads and messages from queue in infinite loop.
 	 * 
 	 * @param args
-	 * @throws JMSException 
+	 * @throws JMSException
 	 */
 	public static void main(String[] args) throws JMSException {
 		Properties props = new Properties();
@@ -59,7 +60,7 @@ public class RSSMainWorker {
 			// configure logger
 			props.load(new FileInputStream("log4j.properties"));
 			PropertyConfigurator.configure(props);
-			
+
 			if (args.length > 0)
 				threadsNum = Integer.parseInt(args[0]);
 
@@ -111,9 +112,10 @@ public class RSSMainWorker {
 
 						// start thread for given RSS feed
 						Runnable rssThreadWorker = new RSSThreadWorker(feedDB,
-								rssColl, entriesColl);
+								rssColl, entriesColl, (int) 3e4);
 						executor.execute(rssThreadWorker);
-						logger.info("New thread started for feed " + feedDB.get("feedUrl"));
+						logger.info("New thread started for feed "
+								+ feedDB.get("feedUrl"));
 					}
 				}
 			}

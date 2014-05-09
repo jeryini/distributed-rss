@@ -1,14 +1,18 @@
 package com.jernejerin;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Properties;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.NoHttpResponseException;
@@ -17,6 +21,8 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PropertyConfigurator;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBCollection;
@@ -33,64 +39,95 @@ import com.sun.syndication.io.SyndFeedInput;
 import com.sun.syndication.io.XmlReader;
 
 /**
+ * This class represents thread worker. The thread is created in class
+ * RSSMainWorker. This thread process the feed, i.e. updating feed data, getting
+ * new entries, etc. The processing of xml is done with Rome library. The HTTP
+ * GET is done with Apache HttpClient library.
+ * 
  * @author Jernej Jerin
- *
+ * @version 1.0
+ * @since 2014-05-06
  */
 public class RSSThreadWorker implements Runnable {
 	private final static String USER_AGENT = "Mozilla/5.0 Firefox/26.0";
-	
+
+	// logger for this class
+	static Logger logger = Logger.getLogger(RSSThreadWorker.class);
+
 	private DBObject feedDB;
 	private DBCollection rssColl;
 	private DBCollection entriesColl;
-	
-	public RSSThreadWorker(DBObject feedDB, DBCollection rssColl, DBCollection entriesColl) {
+	private int updateInterval;
+
+	public RSSThreadWorker(DBObject feedDB, DBCollection rssColl,
+			DBCollection entriesColl, int updateInterval) {
 		this.feedDB = feedDB;
 		this.rssColl = rssColl;
 		this.entriesColl = entriesColl;
+		this.updateInterval = updateInterval;
 	}
-	
-	// TODO: Extensive testing with JUnit of each function
 
 	/**
 	 * Check for new entries every second for one feed infinite times.
 	 */
 	@SuppressWarnings("unchecked")
 	public void run() {
+		Properties props = new Properties();
 		try {
+			// configure logger
+			props.load(new FileInputStream("log4j.properties"));
+			PropertyConfigurator.configure(props);
+
 			// input reader for rss
 			SyndFeedInput input = new SyndFeedInput();
 			SyndFeed feed;
-			
+
 			// check infinite time for new entries of given feed
 			while (true) {
 				// read feed from given feed url
 				feed = readFeed((String) feedDB.get("feedUrl"), input);
-				
-				// update the feed information
-				feedUpdate(feedDB, feed);
-				
-				// get the list of entries that are saved for this feed
-				// with this information we will be able to distinct
-				// between new entries of the given feed
-				ArrayList<Integer> idList = (ArrayList<Integer>) feedDB.get("entries");
-				if (idList == null)
-					idList = new ArrayList<Integer>();
-				
-				// get new entries
-				ArrayList<DBObject> entriesDBNew = insertNewEntries(feed, idList);
-				
-				// set reference to feed
-				feedDB.put("entries", idList);
-				
-				// bulk inset new entries
-				entriesColl.insert(entriesDBNew);
-				
-				// update feed which can contain new references to entries
-				// and updated feed information
-				rssColl.update(new BasicDBObject("feedUrl", feedDB.get("feedUrl")), feedDB);
-				
-				// check every 30 second for new entries
-				Thread.sleep(30000);
+
+				if (feed != null) {
+					logger.info("Successfully read feed "
+							+ feedDB.get("feedUrl"));
+					// update the feed information
+					feedUpdate(feedDB, feed);
+
+					/*
+					 * Get the list of entries that are already saved for this
+					 * feed. With this information we will be able to distinct
+					 * between new entries of the given feed. Each feed contains
+					 * in array SHA-1 hash id of entries that belong to that
+					 * feed. This way we don't have to do additionaly query of
+					 * existing entries. The id is a SHA-1 digest of the uri,
+					 * link, description or title.
+					 */
+					ArrayList<String> idList = (ArrayList<String>) feedDB
+							.get("entries");
+					if (idList == null)
+						idList = new ArrayList<String>();
+
+					// get new entries
+					ArrayList<DBObject> entriesDBNew = insertNewEntries(feed,
+							idList);
+
+					// set reference to feed
+					feedDB.put("entries", idList);
+
+					// bulk inset new entries
+					entriesColl.insert(entriesDBNew);
+
+					// update feed which can contain new references to entries
+					// and updated feed information
+					rssColl.update(
+							new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
+							feedDB);
+				} else
+					logger.info("Problem with reading feed "
+							+ feedDB.get("feedUrl"));
+
+				// check every update interval miliseconds for new entries
+				Thread.sleep(updateInterval);
 			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -100,26 +137,23 @@ public class RSSThreadWorker implements Runnable {
 			e.printStackTrace();
 		} catch (ParsingFeedException e) {
 			e.printStackTrace();
-		}
-		catch (FeedException e) {
+		} catch (FeedException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (Exception ex) {
 			ex.printStackTrace();
-		}
-		finally {
+		} finally {
 			// this feed is not used anymore
 			feedDB.put("used", 0);
-			rssColl.update(new BasicDBObject("feedUrl", feedDB.get("feedUrl")), feedDB);
+			rssColl.update(new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
+					feedDB);
 		}
 	}
-	
-	
+
 	/**
-	 * Read feed from the specified url. Returns null 
-	 * if there is no contente or throws Exception if
-	 * there is problem with building URI.
+	 * Read feed from the specified url. Returns null if there is no contente or
+	 * throws Exception if there is problem with building URI.
 	 * 
 	 * 
 	 * @param url
@@ -127,58 +161,59 @@ public class RSSThreadWorker implements Runnable {
 	 * @return
 	 * @throws Exception
 	 */
-	public static SyndFeed readFeed(String url, SyndFeedInput input) throws Exception {
+	public static SyndFeed readFeed(String url, SyndFeedInput input)
+			throws Exception {
 		CloseableHttpClient httpClient = HttpClients.createDefault();
 		SyndFeed feed = null;
-        try {
-        	HttpGet request;
-        	
-        	// if exception is thrown here where we are building
-        	// URI then thread worker cannot continue on (throw Exception)
-        	try {
-	        	URI feedUrl = new URI(url);
-	            request = new HttpGet(feedUrl.toString());
-        	} catch (NullPointerException ex) {
-        		throw new Exception(ex);
-        	} catch (URISyntaxException ex) {
-        		throw new Exception(ex);
-        	} catch (IllegalArgumentException ex) {
-        		throw new Exception(ex);
-        	}
-            
-            // add header for simulating browser request as some
-            // web servers do not allow requests without header
-            request.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
-            
-            // even if execution does not succeed, catch the exception
-            // here and return null. This will continue the main 
-            // while loop
-            CloseableHttpResponse response = httpClient.execute(request);
+		try {
+			HttpGet request;
 
-            try {
-            	// entity from response
-            	HttpEntity entity = response.getEntity();
-            	
-            	// build feed from entity content
-            	if (entity != null)
-            		feed = input.build(new XmlReader(entity.getContent()));
-            } finally {
-                response.close();
-            }
-        } catch (IllegalStateException e) {
+			// if exception is thrown here where we are building
+			// URI then thread worker cannot continue on (throw Exception)
+			try {
+				URI feedUrl = new URI(url);
+				request = new HttpGet(feedUrl.toString());
+			} catch (NullPointerException ex) {
+				throw new Exception(ex);
+			} catch (URISyntaxException ex) {
+				throw new Exception(ex);
+			} catch (IllegalArgumentException ex) {
+				throw new Exception(ex);
+			}
+
+			// add header for simulating browser request as some
+			// web servers do not allow requests without header
+			request.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
+
+			// even if execution does not succeed, catch the exception
+			// here and return null. This will continue the main
+			// while loop
+			CloseableHttpResponse response = httpClient.execute(request);
+
+			try {
+				// entity from response
+				HttpEntity entity = response.getEntity();
+
+				// build feed from entity content
+				if (entity != null)
+					feed = input.build(new XmlReader(entity.getContent()));
+			} finally {
+				response.close();
+			}
+		} catch (IllegalStateException e) {
 			e.printStackTrace();
 		} catch (FeedException e) {
 			e.printStackTrace();
 		} catch (NoHttpResponseException e) {
-        	e.printStackTrace();
-        } catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (ClientProtocolException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
 			e.printStackTrace();
 		} finally {
-            httpClient.close();
-        }
-        return feed;
+			httpClient.close();
+		}
+		return feed;
 	}
 
 	/**
@@ -187,146 +222,167 @@ public class RSSThreadWorker implements Runnable {
 	 * @param feed
 	 * @param idList
 	 * @return
-	 * @throws IOException 
+	 * @throws IOException
+	 * @throws NoSuchAlgorithmException
 	 */
 	@SuppressWarnings("unchecked")
 	private ArrayList<DBObject> insertNewEntries(SyndFeed feed,
-			ArrayList<Integer> idList) throws IOException {
-		// current local entries for this feed use NORMALIZED data models
-		// using One-To-Many Relationships
-		// reason: http://blog.mongolab.com/2013/04/thinking-about-arrays-in-mongodb/
+			ArrayList<String> idList) throws IOException {
+		// current local entries for this feed use NORMALIZED data models using
+		// One-To-Many Relationships. Reason:
+		// http://blog.mongolab.com/2013/04/thinking-about-arrays-in-mongodb/
 		ArrayList<DBObject> entriesDBNew = new ArrayList<DBObject>();
 		for (SyndEntry entry : (ArrayList<SyndEntry>) feed.getEntries()) {
-			// all elements of an item are optional, however at least 
-			// one of title or description must be present -> we cannot 
-			// trust user about this. That is why we will check first for
-			// the guid, then url and then for description and the title
-			// for inserting new entry check if that entry already exists
-			// Because of possible hash collisions we Extend to 64-bit or use SHA-1.
-			int id = 0;
+			/*
+			 * All elements of an item are optional, however at least one of
+			 * title or description must be present. But we CANNOT TRUST USER
+			 * about this. That is why we will check first for the guid, then
+			 * url and then for description and the title. This combination of
+			 * values will in turn be used to create a hash value using SHA-1.
+			 * The hash value will represent the ID of the entry. This ID will
+			 * help us determine entries that already exist. Because of possible
+			 * hash collisions we use SHA-1 instead of Java hashCode on String.
+			 */
+			String id = null;
 			if (entry.getUri() != null)
-				// first we check if uri (guid) is available
-				id = entry.getUri().hashCode();
-			else if(entry.getLink() != null)
-				id = entry.getLink().hashCode();
+				// first we check if uri (guid) is available. This is the best
+				// attribute as it ensures uniquely identified entry.
+				id = entry.getUri();
+			else if (entry.getLink() != null)
+				id = entry.getLink();
 			else if (entry.getDescription() != null && entry.getTitle() != null)
 				// then we check if description and title are available
-				id = (entry.getDescription() + entry.getTitle()).hashCode();
-			else if (entry.getDescription() != null)
+				id = (entry.getDescription() + entry.getTitle());
+			else if (entry.getDescription() != null
+					&& entry.getDescription().getValue() != null)
 				// only description
-				id = entry.getDescription().hashCode();
+				id = entry.getDescription().getValue();
 			else if (entry.getTitle() != null)
 				// only title
-				id = entry.getTitle().hashCode();
-			// This is bad solution to query DB for each entry if it already exists
-			// query = new BasicDBObject("_id", id);
-			// entryLocal = entriesColl.findOne(query);
-			// lets instead check the array of references in the feed for this id
-			// that way we save DB queries
+				id = entry.getTitle();
 			
-			if (!idList.contains(id)) {
-				// does not exist yet, save it to DB
-				BasicDBObject entryDBNew = new BasicDBObject("_id", id);
-				
-				if (entry.getTitle() != null)
-					entryDBNew.append("title", entry.getTitle());
-				if (entry.getLink() != null) {
-					entryDBNew.append("link", entry.getLink());
-					
-					// if link exists we can fetch the whole entry (HTML page)
-					// using Apache HttpComponents library, module HttpClient
-					CloseableHttpClient httpclient = HttpClients.createDefault();
-			        try {
-			        	// TODO: Spaces and special characters in URL
-			        	URI uri = new URI(entry.getLink());
-			        	// TODO: Circular redirect!
-			            HttpGet httpGet = new HttpGet(uri.toString());
-			            //httpGet.
-			            
-			            // add header for simulating browser request as some
-			            // web servers block automatic querying
-			            httpGet.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
-			            CloseableHttpResponse response = httpclient.execute(httpGet);
-
-			            try {
-			            	// entity from response
-			            	HttpEntity entity = response.getEntity();
-							BufferedReader in = new BufferedReader(
-							        new InputStreamReader(entity.getContent()));
-							String inputLine;
-							StringBuffer strResponse = new StringBuffer();
-							
-							// read response
-							while ((inputLine = in.readLine()) != null) {
-								strResponse.append(inputLine);
+			// we absolutely need id
+			if (id != null) {
+				// for computing SHA-1 digest and getting it as binary data we use
+				// Apache Commons DigestUtil
+				String idHash = DigestUtils.sha1Hex(id);
+	
+				if (!idList.contains(idHash)) {
+					// does not exist yet, save it to DB
+					// we cannot set it to _id (ObjectId) as it only supports 24hex
+					// or 96bits where the SHA-1 produces 160bits hash
+					BasicDBObject entryDBNew = new BasicDBObject("idHash", idHash);
+	
+					if (entry.getTitle() != null)
+						entryDBNew.append("title", entry.getTitle());
+					if (entry.getLink() != null) {
+						entryDBNew.append("link", entry.getLink());
+						// TODO: Separate method for fetching site
+						// if link exists we can fetch the whole entry (HTML page)
+						// using Apache HttpComponents library, module HttpClient
+						CloseableHttpClient httpclient = HttpClients
+								.createDefault();
+						try {
+							// TODO: Spaces and special characters in URL
+							URI uri = new URI(entry.getLink());
+							// TODO: Circular redirect!
+							HttpGet httpGet = new HttpGet(uri.toString());
+							// httpGet.
+	
+							// add header for simulating browser request as some
+							// web servers block automatic querying
+							httpGet.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
+							CloseableHttpResponse response = httpclient
+									.execute(httpGet);
+	
+							try {
+								// entity from response
+								HttpEntity entity = response.getEntity();
+								BufferedReader in = new BufferedReader(
+										new InputStreamReader(entity.getContent()));
+								String inputLine;
+								StringBuffer strResponse = new StringBuffer();
+	
+								// read response
+								while ((inputLine = in.readLine()) != null) {
+									strResponse.append(inputLine);
+								}
+								in.close();
+	
+								// add to database
+								entryDBNew.append("fullContent",
+										strResponse.toString());
+							} finally {
+								response.close();
 							}
-							in.close();
-					 
-							// add to database
-							entryDBNew.append("fullContent", strResponse.toString());
-			            } finally {
-			                response.close();
-			            }
-			        } catch (NoHttpResponseException e) {
-			        	e.printStackTrace();
-			        } catch (ClientProtocolException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (URISyntaxException e) {
-						e.printStackTrace();
-					} finally {
-			            httpclient.close();
-			        }
-				}
-				if (entry.getDescription() != null)
-					entryDBNew.append("description", entry.getDescription().getValue());
-				if (entry.getAuthors() != null && entry.getAuthors().size() > 0) {
-					// call method for constructing the list of authors for DB
-					ArrayList<BasicDBObject> authors = getAuthors((ArrayList<SyndPerson>) entry.getAuthors());
-					feedDB.put("authors", authors);
-					entryDBNew.put("authors", authors);
-				}
-				if (entry.getCategories() != null && entry.getCategories().size() > 0) {
-					ArrayList<BasicDBObject> categories = getCategories((ArrayList<SyndCategory>) entry.getCategories());
-					entryDBNew.append("categories", categories);
-				}
-				// comments does not exist
-				if (entry.getEnclosures() != null && entry.getEnclosures().size() > 0) {
-					ArrayList<BasicDBObject> enclosures = new ArrayList<BasicDBObject>();
-					for (SyndEnclosure enclosure : (ArrayList<SyndEnclosure>) entry.getEnclosures()) {
-						BasicDBObject enclosureDB = new BasicDBObject();
-						
-						// all three attributes are required but we cannot trust the user
-						if (enclosure.getUrl() != null)
-							enclosureDB.append("url", enclosure.getUrl());
-						if (enclosure.getLength() != 0)
-							enclosureDB.append("length", enclosure.getLength());
-						if (enclosure.getType() != null)
-							enclosureDB.append("type", enclosure.getType());
-						enclosures.add(enclosureDB);
+						} catch (NoHttpResponseException e) {
+							e.printStackTrace();
+						} catch (ClientProtocolException e) {
+							e.printStackTrace();
+						} catch (IOException e) {
+							e.printStackTrace();
+						} catch (URISyntaxException e) {
+							e.printStackTrace();
+						} finally {
+							httpclient.close();
+						}
 					}
-					entryDBNew.append("enclosure", enclosures);
+					if (entry.getDescription() != null)
+						entryDBNew.append("description", entry.getDescription()
+								.getValue());
+					if (entry.getAuthors() != null && entry.getAuthors().size() > 0) {
+						// call method for constructing the list of authors for DB
+						ArrayList<BasicDBObject> authors = getAuthors((ArrayList<SyndPerson>) entry
+								.getAuthors());
+						feedDB.put("authors", authors);
+						entryDBNew.put("authors", authors);
+					}
+					if (entry.getCategories() != null
+							&& entry.getCategories().size() > 0) {
+						ArrayList<BasicDBObject> categories = getCategories((ArrayList<SyndCategory>) entry
+								.getCategories());
+						entryDBNew.append("categories", categories);
+					}
+					// comments does not exist
+					if (entry.getEnclosures() != null
+							&& entry.getEnclosures().size() > 0) {
+						ArrayList<BasicDBObject> enclosures = new ArrayList<BasicDBObject>();
+						for (SyndEnclosure enclosure : (ArrayList<SyndEnclosure>) entry
+								.getEnclosures()) {
+							BasicDBObject enclosureDB = new BasicDBObject();
+	
+							// all three attributes are required but we cannot trust
+							// the user
+							if (enclosure.getUrl() != null)
+								enclosureDB.append("url", enclosure.getUrl());
+							if (enclosure.getLength() != 0)
+								enclosureDB.append("length", enclosure.getLength());
+							if (enclosure.getType() != null)
+								enclosureDB.append("type", enclosure.getType());
+							enclosures.add(enclosureDB);
+						}
+						entryDBNew.append("enclosure", enclosures);
+					}
+					if (entry.getUri() != null)
+						entryDBNew.append("guid", entry.getUri());
+					if (entry.getPublishedDate() != null)
+						entryDBNew.append("pubDate", entry.getPublishedDate());
+					// source?
+	
+					// insert new entry into list
+					entriesDBNew.add(entryDBNew);
+	
+					// add id to list
+					idList.add(idHash);
 				}
-				if (entry.getUri() != null)
-					entryDBNew.append("guid", entry.getUri());
-				if (entry.getPublishedDate() != null)
-					entryDBNew.append("pubDate", entry.getPublishedDate());
-				// source?
-				
-				// insert new entry into list
-				entriesDBNew.add(entryDBNew);
-				
-				// add id to list
-				idList.add(id);
 			}
 		}
-		
+
 		return entriesDBNew;
 	}
 
 	/**
-	 * Updates feed information such as accessed time and other attributes 
+	 * Updates feed information such as accessed time and other attributes
 	 * pertaining feed/channel.
 	 * 
 	 * @param feedDB
@@ -334,12 +390,12 @@ public class RSSThreadWorker implements Runnable {
 	 */
 	@SuppressWarnings("unchecked")
 	private void feedUpdate(DBObject feedDB, SyndFeed feed) {
-		// this field is custom
+		// this field is for RSS Delegate worker
 		feedDB.put("accessedAt", new Date());
-		
+
 		/******** REQUIRED channel elements as defined in RSS 2.0 Specification ********/
 		// http://cyber.law.harvard.edu/rss/rss.html#
-		// even though this elements are required by specification we 
+		// even though this elements are required by specification we
 		// cannot trust the source
 		if (feed.getTitle() != null)
 			feedDB.put("title", feed.getTitle());
@@ -347,29 +403,31 @@ public class RSSThreadWorker implements Runnable {
 			feedDB.put("link", feed.getLink());
 		if (feed.getDescription() != null)
 			feedDB.put("description", feed.getDescription());
-		
+
 		/******** OPTIONAL channel elements as defined in RSS 2.0 Specification ********/
 		if (feed.getLanguage() != null)
 			feedDB.put("language", feed.getLanguage());
 		if (feed.getCopyright() != null)
 			feedDB.put("copyright", feed.getCopyright());
-		// no specific get method for managing editor and web master. Using
-		// authors instead
+		// no specific get method for managing editor and web master in rome
+		// library. Using authors instead
 		if (feed.getAuthors() != null && feed.getAuthors().size() > 0) {
-			ArrayList<BasicDBObject> authors = getAuthors((ArrayList<SyndPerson>) feed.getAuthors());
+			ArrayList<BasicDBObject> authors = getAuthors((ArrayList<SyndPerson>) feed
+					.getAuthors());
 			feedDB.put("authors", authors);
 		}
 		if (feed.getPublishedDate() != null)
 			feedDB.put("pubDate", feed.getPublishedDate());
-		// last build date does not exist
+		// last build date does not exist in rome library
 		if (feed.getCategories() != null && feed.getCategories().size() > 0) {
-			ArrayList<BasicDBObject> categories = getCategories((ArrayList<SyndCategory>) feed.getCategories());
+			ArrayList<BasicDBObject> categories = getCategories((ArrayList<SyndCategory>) feed
+					.getCategories());
 			feedDB.put("category", categories);
 		}
-		// generator does not exist
-		// docs does not exist
-		// cloud does not exist
-		// ttl does not exist
+		// generator does not exist in rome library
+		// docs does not exist in rome library
+		// cloud does not exist in rome library
+		// ttl does not exist in rome library
 		SyndImage feedImage = feed.getImage();
 		if (feedImage != null) {
 			BasicDBObject imageDB = new BasicDBObject();
@@ -381,18 +439,19 @@ public class RSSThreadWorker implements Runnable {
 				imageDB.append("link", feedImage.getLink());
 			if (feedImage.getDescription() != null)
 				imageDB.append("description", feedImage.getDescription());
-			if (feedImage.getUrl() != null || feedImage.getTitle() != null || 
-					feedImage.getLink() != null || feedImage.getDescription() != null)
+			if (feedImage.getUrl() != null || feedImage.getTitle() != null
+					|| feedImage.getLink() != null
+					|| feedImage.getDescription() != null)
 				feedDB.put("image", imageDB);
-			// width does not exist
-			// height does not exist
+			// width does not exist in rome library
+			// height does not exist in rome library
 		}
-		// rating does not exist
-		// text input does not exist
-		// skip hours does not exist
-		// skip days does not exist
+		// rating does not exist in rome library
+		// text input does not exist in rome library
+		// skip hours does not exist in rome library
+		// skip days does not exist in rome library
 	}
-	
+
 	/**
 	 * Returns a list of categories for feed or entry.
 	 * 
@@ -404,7 +463,7 @@ public class RSSThreadWorker implements Runnable {
 		ArrayList<BasicDBObject> categoriesDB = new ArrayList<BasicDBObject>();
 		for (SyndCategory category : categories) {
 			BasicDBObject categoryDB = new BasicDBObject();
-			
+
 			if (category.getName() != null)
 				categoryDB.append("name", category.getName());
 			if (category.getTaxonomyUri() != null)
@@ -412,7 +471,7 @@ public class RSSThreadWorker implements Runnable {
 			if (category.getName() != null || category.getTaxonomyUri() != null)
 				categoriesDB.add(categoryDB);
 		}
-		
+
 		return categoriesDB;
 	}
 
@@ -422,11 +481,12 @@ public class RSSThreadWorker implements Runnable {
 	 * @param authors
 	 * @return
 	 */
-	private static ArrayList<BasicDBObject> getAuthors(ArrayList<SyndPerson> authors) {
+	private static ArrayList<BasicDBObject> getAuthors(
+			ArrayList<SyndPerson> authors) {
 		ArrayList<BasicDBObject> authorsDB = new ArrayList<BasicDBObject>();
 		for (SyndPerson author : authors) {
 			BasicDBObject authorDB = new BasicDBObject();
-			
+
 			if (author.getName() != null)
 				authorDB.append("name", author.getName());
 			if (author.getUri() != null)
@@ -434,7 +494,8 @@ public class RSSThreadWorker implements Runnable {
 			if (author.getName() != null || author.getUri() != null)
 				authorsDB.add(authorDB);
 		}
-		
+
 		return authorsDB;
 	}
+
 }

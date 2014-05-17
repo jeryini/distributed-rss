@@ -35,7 +35,7 @@ import com.sun.syndication.io.SyndFeedInput;
 @RunWith(Parameterized.class)
 public class RSSThreadWorkerReadFeedTest {
 	// logger for this class
-	static Logger logger = Logger.getLogger(RSSDelegateTest.class);
+	static Logger logger = Logger.getLogger(RSSThreadWorkerReadFeedTest.class);
 
 	static MongoClient mongoClient = null;
 	static DBCollection rssColl;
@@ -120,7 +120,6 @@ public class RSSThreadWorkerReadFeedTest {
 	/**
 	 * Test method for read feed. Checks if we get back the feed object.
 	 * {@link com.jernejerin.RSSThreadWorker#readFeed(java.lang.String, com.sun.syndication.io.SyndFeedInput)}
-	 * .
 	 * 
 	 * @throws Exception
 	 */

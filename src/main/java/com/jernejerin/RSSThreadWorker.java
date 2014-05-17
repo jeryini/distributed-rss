@@ -2,6 +2,7 @@ package com.jernejerin;
 
 import java.io.BufferedReader;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
@@ -12,6 +13,14 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Properties;
 
+import javax.jms.Connection;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.MessageProducer;
+import javax.jms.Session;
+import javax.jms.TextMessage;
+
+import org.apache.activemq.Message;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
@@ -54,17 +63,22 @@ public class RSSThreadWorker implements Runnable {
 	// logger for this class
 	static Logger logger = Logger.getLogger(RSSThreadWorker.class);
 
+	// name of the queue from whom we will be receiving messages
+	private static final String SUBJECT = "RSSFEEDSQUEUE";
+
+	private Message msg;
 	private DBObject feedDB;
 	private DBCollection rssColl;
 	private DBCollection entriesColl;
-	private int updateInterval;
+	private Connection conn;
 
-	public RSSThreadWorker(DBObject feedDB, DBCollection rssColl,
-			DBCollection entriesColl, int updateInterval) {
+	public RSSThreadWorker(Message msg, DBObject feedDB, DBCollection rssColl,
+			DBCollection entriesColl, Connection conn) {
+		this.msg = msg;
 		this.feedDB = feedDB;
 		this.rssColl = rssColl;
 		this.entriesColl = entriesColl;
-		this.updateInterval = updateInterval;
+		this.conn = conn;
 	}
 
 	/**
@@ -80,81 +94,103 @@ public class RSSThreadWorker implements Runnable {
 
 			// input reader for rss
 			SyndFeedInput input = new SyndFeedInput();
-			SyndFeed feed;
+			SyndFeed feed = readFeed((String) feedDB.get("feedUrl"), input);
 
-			// check infinite time for new entries of given feed
-			while (true) {
-				// read feed from given feed url
-				feed = readFeed((String) feedDB.get("feedUrl"), input);
+			if (feed != null) {
+				logger.info("Successfully read feed " + feedDB.get("feedUrl"));
+				// update the feed information
+				feedUpdate(feedDB, feed);
 
-				if (feed != null) {
-					logger.info("Successfully read feed "
-							+ feedDB.get("feedUrl"));
-					// update the feed information
-					feedUpdate(feedDB, feed);
+				/*
+				 * Get the list of entries that are already saved for this feed.
+				 * With this information we will be able to distinct between new
+				 * entries of the given feed. Each feed contains in array SHA-1
+				 * hash id of entries that belong to that feed. This way we
+				 * don't have to do additionaly query of existing entries. The
+				 * id is a SHA-1 digest of the uri, link, description or title.
+				 */
+				ArrayList<String> idList = (ArrayList<String>) feedDB
+						.get("entries");
+				if (idList == null)
+					idList = new ArrayList<String>();
 
-					/*
-					 * Get the list of entries that are already saved for this
-					 * feed. With this information we will be able to distinct
-					 * between new entries of the given feed. Each feed contains
-					 * in array SHA-1 hash id of entries that belong to that
-					 * feed. This way we don't have to do additionaly query of
-					 * existing entries. The id is a SHA-1 digest of the uri,
-					 * link, description or title.
-					 */
-					ArrayList<String> idList = (ArrayList<String>) feedDB
-							.get("entries");
-					if (idList == null)
-						idList = new ArrayList<String>();
+				// get new entries
+				ArrayList<DBObject> entriesDBNew = getNewEntries(feed, idList);
 
-					// get new entries
-					ArrayList<DBObject> entriesDBNew = insertNewEntries(feed,
-							idList);
+				// set reference to feed
+				feedDB.put("entries", idList);
 
-					// set reference to feed
-					feedDB.put("entries", idList);
+				// bulk insert new entries
+				entriesColl.insert(entriesDBNew);
 
-					// bulk inset new entries
-					entriesColl.insert(entriesDBNew);
-
-					// update feed which can contain new references to entries
-					// and updated feed information
-					rssColl.update(
-							new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
-							feedDB);
-				} else
-					logger.info("Problem with reading feed "
-							+ feedDB.get("feedUrl"));
-
-				// check every update interval miliseconds for new entries
-				Thread.sleep(updateInterval);
-			}
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
+				// update feed which can contain new references to entries
+				// and updated feed information
+				rssColl.update(
+						new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
+						feedDB);
+			} else
+				logger.info("Problem with reading feed "
+						+ feedDB.get("feedUrl"));
+		} catch (FileNotFoundException e) {
+			logger.fatal(e.getMessage());
+		} catch (SecurityException e) {
+			logger.fatal(e.getMessage());
 		} catch (IllegalArgumentException e) {
-			e.printStackTrace();
+			logger.fatal(e.getMessage());
+		} catch (InterruptedException e) {
+			logger.fatal(e.getMessage());
+		} catch (MalformedURLException e) {
+			logger.fatal(e.getMessage());
 		} catch (ParsingFeedException e) {
-			e.printStackTrace();
+			logger.fatal(e.getMessage());
 		} catch (FeedException e) {
-			e.printStackTrace();
+			logger.fatal(e.getMessage());
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.fatal(e.getMessage());
 		} catch (Exception ex) {
-			ex.printStackTrace();
+			logger.fatal(ex.getMessage());
 		} finally {
-			// this feed is not used anymore
-			feedDB.put("used", 0);
-			rssColl.update(new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
-					feedDB);
+			/*
+			 * Put it back to the queue because Session and MessageProducer are
+			 * not Thread safe we need to create each of them in sepearate
+			 * thread ConnectionFactory and Connection are thread safe!
+			 */
+			Session sess = null;
+			MessageProducer msgProd = null;
+			try {
+				// create a non-transactional session for sending messages
+				sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
+	
+				// destination is our queue on JMS
+				Destination dest = sess.createQueue(SUBJECT);
+	
+				// producer for sending messages
+				msgProd = sess.createProducer(dest);
+				
+				// send feed in the message to the queue
+				TextMessage txtMsg = sess.createTextMessage(feedDB.toString());
+				msgProd.send(txtMsg);
+				logger.info("Message sent from thread '" + txtMsg.getText() + "'");
+				
+				// now we can acknowledge that the message was successfully received
+				// this happens when the same message is successfully sent back into queue
+				msg.acknowledge();
+			} catch (JMSException e) {
+				logger.fatal(e.getMessage());
+			} finally {
+				try {
+					sess.close();
+					msgProd.close();
+				} catch (JMSException e) {
+					logger.fatal(e.getMessage());
+				}
+			}
 		}
 	}
 
 	/**
-	 * Read feed from the specified url. Returns null if there is no contente or
+	 * Read feed from the specified url. Returns null if there is no content or
 	 * throws Exception if there is problem with building URI.
-	 * 
 	 * 
 	 * @param url
 	 * @param input
@@ -181,13 +217,15 @@ public class RSSThreadWorker implements Runnable {
 				throw new Exception(ex);
 			}
 
-			// add header for simulating browser request as some
-			// web servers do not allow requests without header
+			// add headers for simulating browser request as some
+			// web servers do not allow requests without header or do not work
+			// properly without headers
 			request.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
+			request.addHeader(HttpHeaders.ACCEPT, "*/*");
 
 			// even if execution does not succeed, catch the exception
 			// here and return null. This will continue the main
-			// while loop
+			// while loop and try to get the feed again after specified seconds.
 			CloseableHttpResponse response = httpClient.execute(request);
 
 			try {
@@ -201,15 +239,15 @@ public class RSSThreadWorker implements Runnable {
 				response.close();
 			}
 		} catch (IllegalStateException e) {
-			e.printStackTrace();
+			logger.error(e.getMessage());
 		} catch (FeedException e) {
-			e.printStackTrace();
+			logger.error(e.getMessage());
 		} catch (NoHttpResponseException e) {
-			e.printStackTrace();
+			logger.error(e.getMessage());
 		} catch (ClientProtocolException e) {
-			e.printStackTrace();
+			logger.error(e.getMessage());
 		} catch (IOException e) {
-			e.printStackTrace();
+			logger.error(e.getMessage());
 		} finally {
 			httpClient.close();
 		}
@@ -226,7 +264,7 @@ public class RSSThreadWorker implements Runnable {
 	 * @throws NoSuchAlgorithmException
 	 */
 	@SuppressWarnings("unchecked")
-	private ArrayList<DBObject> insertNewEntries(SyndFeed feed,
+	private ArrayList<DBObject> getNewEntries(SyndFeed feed,
 			ArrayList<String> idList) throws IOException {
 		// current local entries for this feed use NORMALIZED data models using
 		// One-To-Many Relationships. Reason:
@@ -241,7 +279,7 @@ public class RSSThreadWorker implements Runnable {
 			 * values will in turn be used to create a hash value using SHA-1.
 			 * The hash value will represent the ID of the entry. This ID will
 			 * help us determine entries that already exist. Because of possible
-			 * hash collisions we use SHA-1 instead of Java hashCode on String.
+			 * hash collisions we use SHA-1 instead of Java hashCode.
 			 */
 			String id = null;
 			if (entry.getUri() != null)
@@ -249,6 +287,7 @@ public class RSSThreadWorker implements Runnable {
 				// attribute as it ensures uniquely identified entry.
 				id = entry.getUri();
 			else if (entry.getLink() != null)
+				// link is also a good unique identity
 				id = entry.getLink();
 			else if (entry.getDescription() != null && entry.getTitle() != null)
 				// then we check if description and title are available
@@ -260,78 +299,40 @@ public class RSSThreadWorker implements Runnable {
 			else if (entry.getTitle() != null)
 				// only title
 				id = entry.getTitle();
-			
+
 			// we absolutely need id
 			if (id != null) {
-				// for computing SHA-1 digest and getting it as binary data we use
-				// Apache Commons DigestUtil
+				// for computing SHA-1 digest and getting it as binary data we
+				// use Apache Commons DigestUtil
 				String idHash = DigestUtils.sha1Hex(id);
-	
+
 				if (!idList.contains(idHash)) {
-					// does not exist yet, save it to DB
-					// we cannot set it to _id (ObjectId) as it only supports 24hex
-					// or 96bits where the SHA-1 produces 160bits hash
-					BasicDBObject entryDBNew = new BasicDBObject("idHash", idHash);
-	
+					// does not exist yet, save it to DB we cannot set it to _id
+					// (ObjectId) as it only supports 24hex or 96bits where the
+					// SHA-1 produces 160bits hash
+					BasicDBObject entryDBNew = new BasicDBObject("idHash",
+							idHash);
+
 					if (entry.getTitle() != null)
 						entryDBNew.append("title", entry.getTitle());
 					if (entry.getLink() != null) {
 						entryDBNew.append("link", entry.getLink());
-						// TODO: Separate method for fetching site
-						// if link exists we can fetch the whole entry (HTML page)
-						// using Apache HttpComponents library, module HttpClient
-						CloseableHttpClient httpclient = HttpClients
-								.createDefault();
-						try {
-							// TODO: Spaces and special characters in URL
-							URI uri = new URI(entry.getLink());
-							// TODO: Circular redirect!
-							HttpGet httpGet = new HttpGet(uri.toString());
-							// httpGet.
-	
-							// add header for simulating browser request as some
-							// web servers block automatic querying
-							httpGet.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
-							CloseableHttpResponse response = httpclient
-									.execute(httpGet);
-	
-							try {
-								// entity from response
-								HttpEntity entity = response.getEntity();
-								BufferedReader in = new BufferedReader(
-										new InputStreamReader(entity.getContent()));
-								String inputLine;
-								StringBuffer strResponse = new StringBuffer();
-	
-								// read response
-								while ((inputLine = in.readLine()) != null) {
-									strResponse.append(inputLine);
-								}
-								in.close();
-	
-								// add to database
-								entryDBNew.append("fullContent",
-										strResponse.toString());
-							} finally {
-								response.close();
-							}
-						} catch (NoHttpResponseException e) {
-							e.printStackTrace();
-						} catch (ClientProtocolException e) {
-							e.printStackTrace();
-						} catch (IOException e) {
-							e.printStackTrace();
-						} catch (URISyntaxException e) {
-							e.printStackTrace();
-						} finally {
-							httpclient.close();
-						}
+
+						// if link exists we can fetch the whole entry (HTML
+						// page) using Apache HttpComponents library, module
+						// HttpClient
+						String webPage = fetchWebPage(entry);
+
+						// add to database
+						entryDBNew.append("fullContent", webPage);
 					}
 					if (entry.getDescription() != null)
 						entryDBNew.append("description", entry.getDescription()
 								.getValue());
-					if (entry.getAuthors() != null && entry.getAuthors().size() > 0) {
-						// call method for constructing the list of authors for DB
+					if (entry.getAuthors() != null
+							&& entry.getAuthors().size() > 0) {
+						// call method for constructing the list of authors for
+						// DB
 						ArrayList<BasicDBObject> authors = getAuthors((ArrayList<SyndPerson>) entry
 								.getAuthors());
 						feedDB.put("authors", authors);
@@ -350,13 +351,14 @@ public class RSSThreadWorker implements Runnable {
 						for (SyndEnclosure enclosure : (ArrayList<SyndEnclosure>) entry
 								.getEnclosures()) {
 							BasicDBObject enclosureDB = new BasicDBObject();
-	
-							// all three attributes are required but we cannot trust
-							// the user
+
+							// all three attributes are required but we cannot
+							// trust the user
 							if (enclosure.getUrl() != null)
 								enclosureDB.append("url", enclosure.getUrl());
 							if (enclosure.getLength() != 0)
-								enclosureDB.append("length", enclosure.getLength());
+								enclosureDB.append("length",
+										enclosure.getLength());
 							if (enclosure.getType() != null)
 								enclosureDB.append("type", enclosure.getType());
 							enclosures.add(enclosureDB);
@@ -367,11 +369,11 @@ public class RSSThreadWorker implements Runnable {
 						entryDBNew.append("guid", entry.getUri());
 					if (entry.getPublishedDate() != null)
 						entryDBNew.append("pubDate", entry.getPublishedDate());
-					// source?
-	
+					// source does not exist in rome library
+
 					// insert new entry into list
 					entriesDBNew.add(entryDBNew);
-	
+
 					// add id to list
 					idList.add(idHash);
 				}
@@ -379,6 +381,68 @@ public class RSSThreadWorker implements Runnable {
 		}
 
 		return entriesDBNew;
+	}
+
+	/**
+	 * Fetch web page given the Synd entry and return it. For read we use Apache
+	 * HttpComponents library, module HttpClient.
+	 * 
+	 * @param entry
+	 * @return
+	 * @throws IOException
+	 */
+	private String fetchWebPage(SyndEntry entry) {
+		CloseableHttpClient httpclient = HttpClients.createDefault();
+		String webPage = null;
+		try {
+			if (entry.getLink() != null) {
+				URI uri = new URI(entry.getLink());
+				HttpGet httpGet = new HttpGet(uri.toString());
+
+				// add header for simulating browser request as some
+				// web servers block automatic querying
+				httpGet.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
+				CloseableHttpResponse response = httpclient.execute(httpGet);
+
+				try {
+					// entity from response
+					HttpEntity entity = response.getEntity();
+					if (entity != null) {
+						BufferedReader in = new BufferedReader(
+								new InputStreamReader(entity.getContent()));
+						String inputLine;
+						StringBuffer strResponse = new StringBuffer();
+
+						// read response
+						while ((inputLine = in.readLine()) != null) {
+							strResponse.append(inputLine);
+						}
+						in.close();
+						webPage = strResponse.toString();
+					}
+				} finally {
+					response.close();
+				}
+			}
+		} catch (URISyntaxException e) {
+			logger.error(e.getMessage());
+		} catch (IllegalArgumentException e) {
+			logger.error(e.getMessage());
+		} catch (NoHttpResponseException e) {
+			e.printStackTrace();
+		} catch (ClientProtocolException e) {
+			logger.error(e.getMessage());
+		} catch (IOException e) {
+			logger.error(e.getMessage());
+		} finally {
+			try {
+				httpclient.close();
+			} catch (IOException e) {
+				logger.error(e.getMessage());
+			}
+		}
+
+		return webPage;
 	}
 
 	/**
@@ -390,7 +454,8 @@ public class RSSThreadWorker implements Runnable {
 	 */
 	@SuppressWarnings("unchecked")
 	private void feedUpdate(DBObject feedDB, SyndFeed feed) {
-		// this field is for RSS Delegate worker
+		// this field is for RSS Delegate worker to check for stalled threads or
+		// threads that crashed and were not able to update used filed back to 0
 		feedDB.put("accessedAt", new Date());
 
 		/******** REQUIRED channel elements as defined in RSS 2.0 Specification ********/

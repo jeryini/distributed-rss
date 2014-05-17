@@ -54,14 +54,14 @@ public class InsertResources {
 
 			String line;
 			while ((line = br.readLine()) != null) {
-				// save each feed into DB. We also need to set
-				// used parameter to 0, as this will be used to
-				// check which feeds are in use
-				BasicDBObject feedNew = new BasicDBObject("feedUrl", line)
-						.append("used", 0);
+				// save each feed into DB
+				BasicDBObject feedNew = new BasicDBObject("feedUrl", line);
 				rssColl.insert(feedNew);
 				logger.info("Inserted new feed into DB.");
 			}
+			
+			  // create index on "accessedAt", ascending
+			rssColl.createIndex(new BasicDBObject("accessedAt", 1));
 
 			br.close();
 		} catch (UnknownHostException e) {

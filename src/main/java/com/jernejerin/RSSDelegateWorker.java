@@ -15,6 +15,7 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
+import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoException;
@@ -23,34 +24,38 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
 /**
- * This class represents main worker that delegates RSS feeds to message queue.
- * The delegation of the feeds to the queue is based on the fact if the feed is
- * currently in use or if some specified amount of time has passed since feed
- * was updated the last time.
+ * This class represents delegate worker that delegates RSS feeds to message
+ * queue. The delegation of the feeds to the queue is based on the fact if some
+ * specified amount of time has passed since feed was updated the last time. The
+ * worker first pushes all the feeds into the queue and then indefinitely checks
+ * for last updated time.
  * 
  * @author Jernej Jerin
  * @version 1.0
  * @since 2014-05-06
  */
 public class RSSDelegateWorker {
-	
-	// default broker URL which means that JMS server is
-	// on localhost
+
+	/** Default broker URL. */
 	public static final String URL = ActiveMQConnection.DEFAULT_BROKER_URL;
 
-	// name of the queue to whom we will be sending messages
+	/** Name of the queue to whom we will be sending messages */
 	public static final String SUBJECT = "RSSFEEDSQUEUE";
 
-	// the time for checking for feeds that have not been used.
-	// If it is not passed as argument then default time of 300s is used
-	public static int seconds = 300;
-	
-	// logger for this class
+	/**
+	 * The time for checking for feeds that have not been accessed in seconds.
+	 * This depends on number of VM and threads per VM. If we have a lot of
+	 * powerful VM, than this number should be lower. If it is not passed as
+	 * argument then default time of 120min.
+	 */
+	public static int seconds = 120 * 60;
+
+	/** Logger for this class. */
 	static Logger logger = Logger.getLogger(RSSDelegateWorker.class);
 
 	/**
-	 * Implemented PointToPoint model because we want only one of the consumers
-	 * (RSSMainWorker) to receive the message.
+	 * Implemented PointToPoint (Queue) model because we want only one of the
+	 * consumers (RSSMainWorker) to receive the message.
 	 * 
 	 * @param args
 	 * @throws JMSException
@@ -63,7 +68,7 @@ public class RSSDelegateWorker {
 			// configure logger
 			props.load(new FileInputStream("log4j.properties"));
 			PropertyConfigurator.configure(props);
-			
+
 			if (args.length > 0)
 				seconds = Integer.parseInt(args[0]);
 
@@ -74,10 +79,9 @@ public class RSSDelegateWorker {
 			DBCollection rssColl = rssDB.getCollection("feeds");
 			logger.info("Created connection to MongoDB.");
 
-			// two queries, the first one returns feeds currently not used
-			// and the second is for querying the feeds not used in last
+			// query for querying the feeds not queued in last specified
 			// seconds
-			BasicDBObject queryFeedsUsed = new BasicDBObject("used", 0), queryLastAccessed = null;
+			BasicDBObject queryLastAccessed = null;
 
 			// connection to JMS server
 			ConnectionFactory connFac = new ActiveMQConnectionFactory(URL);
@@ -94,10 +98,20 @@ public class RSSDelegateWorker {
 			// producer for sending messages
 			MessageProducer msgProd = sess.createProducer(dest);
 
-			// indefinetly check for feeds
+			// put all the feeds into the queue
+			DBCursor cursor = rssColl.find();
+			try {
+				while (cursor.hasNext())
+					sendMessage(cursor.next(), rssColl, msgProd, sess);
+			} finally {
+				cursor.close();
+			}
+
+			// indefinetly check for stalled feeds (crashed VM-RSSMainWorker or
+			// thread-RSSThreadWorker). So this is for solving unchecked
+			// exceptions.
 			while (true) {
-				checkFeeds(queryFeedsUsed, queryLastAccessed, rssColl, msgProd,
-						sess);
+				checkFeeds(queryLastAccessed, rssColl, msgProd, sess);
 			}
 
 		} catch (JMSException e) {
@@ -121,45 +135,38 @@ public class RSSDelegateWorker {
 	}
 
 	/**
-	 * Check for feeds not used or not being updated in last n seconds and then
-	 * send message containing feed to the queue.
+	 * Check for feeds not being updated in last n seconds and then send message
+	 * containing feed to the queue.
 	 * 
-	 * @param queryFeedsUsed
 	 * @param queryLastAccessed
 	 * @param rssColl
 	 * @param msgProd
 	 * @param sess
 	 * @throws JMSException
 	 */
-	public static void checkFeeds(BasicDBObject queryFeedsUsed,
-			BasicDBObject queryLastAccessed, DBCollection rssColl,
-			MessageProducer msgProd, Session sess) throws JMSException  {
-
-		// get the first RSS feed that is currently not used
-		DBObject feed = rssColl.findOne(queryFeedsUsed);
-
-		if (feed != null) {
-			logger.info("Feed " + feed.get("feedUrl") + " not used.");
-			sendMessage(feed, rssColl, msgProd, sess);
-		}
-
-		// the second query returns feeds that have not been used
-		// in the past n seconds (n * 1000). This is a backup option
-		// in case that RSSThreadWorker shuts down unexpectedly and is not able
-		// to write back the attribute used to 0.
+	public static void checkFeeds(BasicDBObject queryLastAccessed,
+			DBCollection rssColl, MessageProducer msgProd, Session sess)
+			throws JMSException {
+		/*
+		 * The second query returns feeds that have not been queued in the past
+		 * n seconds (n * 1000). This is a backup option for in case that
+		 * RSSThreadWorker shuts down unexpectedly and is not able to put the
+		 * feed into queue.
+		 */
 		queryLastAccessed = new BasicDBObject("accessedAt", new BasicDBObject(
 				"$lt", new Date(System.currentTimeMillis() - seconds * 1000)));
-		feed = rssColl.findOne(queryLastAccessed);
+		DBObject feed = rssColl.findOne(queryLastAccessed);
 
 		if (feed != null) {
-			logger.info("Feed " + feed.get("feedUrl") + " has not been updated in last " + seconds + "s.");
+			logger.info("Feed " + feed.get("feedUrl")
+					+ " has not been updated in last " + seconds + "s.");
 			sendMessage(feed, rssColl, msgProd, sess);
 		}
 	}
 
 	/**
-	 * Update the feed attributes (accessedAt, used) and send it to the queue
-	 * for the RSSMainWorker to pick it up.
+	 * Update the feed attributes (accessedAt) and send it to the queue
+	 * for the RSSMainWorker to dequeued it.
 	 * 
 	 * @param feed
 	 * @param rssColl
@@ -169,9 +176,8 @@ public class RSSDelegateWorker {
 	 */
 	public static void sendMessage(DBObject feed, DBCollection rssColl,
 			MessageProducer msgProd, Session sess) throws JMSException {
-		// update the used field and the last accessed date time field
+		// update the last accessed date time field
 		feed.put("accessedAt", new Date());
-		feed.put("used", 1);
 		rssColl.update(new BasicDBObject("_id", feed.get("_id")), feed);
 
 		// send feed in the message to the queue
@@ -179,5 +185,5 @@ public class RSSDelegateWorker {
 		msgProd.send(txtMsg);
 		logger.info("Message sent '" + txtMsg.getText() + "'");
 	}
-	
+
 }

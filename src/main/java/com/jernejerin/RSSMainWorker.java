@@ -9,10 +9,16 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import javax.jms.*;
+import javax.jms.Connection;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.MessageConsumer;
+import javax.jms.TextMessage;
 
 import org.apache.activemq.ActiveMQConnection;
 import org.apache.activemq.ActiveMQConnectionFactory;
+import org.apache.activemq.ActiveMQSession;
+import org.apache.activemq.Message;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
@@ -72,14 +78,19 @@ public class RSSMainWorker {
 			DBCollection entriesColl = rssDB.getCollection("entries");
 			logger.info("Created connection to MongoDB.");
 
-			// connection to JMS server
-			ConnectionFactory connFac = new ActiveMQConnectionFactory(URL);
+			// connection to JMS server. ConnectionFactory and Connection are
+			// thread safe!
+			ActiveMQConnectionFactory connFac = new ActiveMQConnectionFactory(
+					URL);
 			conn = connFac.createConnection();
 			conn.start();
 			logger.info("Created connection to ActiveMQ.");
 
-			// create a non-transactional session for sending messages
-			Session sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
+			// create a non-transactional session for sending messages with
+			// client acknowledge. We need none JMS compatible acknowledge, i.e.
+			// vendor specific
+			ActiveMQSession sess = (ActiveMQSession) conn.createSession(false,
+					ActiveMQSession.INDIVIDUAL_ACKNOWLEDGE);
 
 			// destination is our queue on JMS
 			Destination dest = sess.createQueue(SUBJECT);
@@ -100,7 +111,7 @@ public class RSSMainWorker {
 					logger.info("New thread available.");
 					// get the available RSS feed from the message queue
 					// this call is blocking!
-					Message msg = msgCons.receive();
+					Message msg = (Message) msgCons.receive();
 					logger.info("Received new job from queue.");
 
 					if (msg instanceof TextMessage) {
@@ -111,8 +122,8 @@ public class RSSMainWorker {
 								.getText());
 
 						// start thread for given RSS feed
-						Runnable rssThreadWorker = new RSSThreadWorker(feedDB,
-								rssColl, entriesColl, (int) 3e4);
+						Runnable rssThreadWorker = new RSSThreadWorker(msg, feedDB,
+								rssColl, entriesColl, conn);
 						executor.execute(rssThreadWorker);
 						logger.info("New thread started for feed "
 								+ feedDB.get("feedUrl"));

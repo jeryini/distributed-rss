@@ -52,7 +52,7 @@ public class RSSDelegateTest {
 	static MongoClient mongoClient = null;
 	static Connection conn = null;
 	static DBCollection rssColl;
-	static BasicDBObject queryFeedsUsed, queryLastAccessed = null;
+	static BasicDBObject queryLastAccessed = null;
 	static Session sess;
 	static MessageProducer msgProd;
 	static MessageConsumer msgCons;
@@ -71,7 +71,7 @@ public class RSSDelegateTest {
 			// configure logger
 			props.load(new FileInputStream("log4j.properties"));
 			PropertyConfigurator.configure(props);
-			
+
 			// we only need one instance of these classes for MongoDB
 			// even with multiple threads -> thread safe
 			mongoClient = new MongoClient("localhost", 27017);
@@ -79,11 +79,6 @@ public class RSSDelegateTest {
 			// using test database
 			DB rssDB = mongoClient.getDB("rssdbtest");
 			rssColl = rssDB.getCollection("feeds");
-
-			// two queries, the first one returns feeds currently not used
-			// and the second is for querying the feeds not used in last 5
-			// minutes
-			queryFeedsUsed = new BasicDBObject("used", 0);
 
 			// connection to JMS server
 			ConnectionFactory connFac = new ActiveMQConnectionFactory(
@@ -142,27 +137,24 @@ public class RSSDelegateTest {
 
 		// add test data
 		BasicDBObject rssFeed = new BasicDBObject("feedUrl",
-				"http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml").append("used",
-				0);
+				"http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml");
 		rssColl.insert(rssFeed);
 
 		// for testing that enough time has passed to trigger second query
 		rssFeed = new BasicDBObject("feedUrl",
-				"http://100meterijs.wordpress.com/feed/").append("used", 1)
-				.append("accessedAt",
-						new Date(System.currentTimeMillis() - 500 * 1000));
+				"http://100meterijs.wordpress.com/feed/").append("accessedAt",
+				new Date(System.currentTimeMillis() - 500 * 1000));
 		rssColl.insert(rssFeed);
 
 		// for testing that not enough time has passed
 		rssFeed = new BasicDBObject("feedUrl",
-				"http://100meterijs.wordpress.com/feed/").append("used", 1)
-				.append("accessedAt",
-						new Date(System.currentTimeMillis() - 200 * 1000));
+				"http://100meterijs.wordpress.com/feed/").append("accessedAt",
+				new Date(System.currentTimeMillis() - 200 * 1000));
 		rssColl.insert(rssFeed);
 
 		for (int i = 0; i < 3; i++) {
-			RSSDelegateWorker.checkFeeds(queryFeedsUsed, queryLastAccessed, rssColl,
-					msgProd, sess);
+			RSSDelegateWorker.checkFeeds(queryLastAccessed,
+					rssColl, msgProd, sess);
 		}
 
 		int msgCount = 0;
@@ -190,11 +182,10 @@ public class RSSDelegateTest {
 
 		// add test data to DB
 		BasicDBObject rssFeed = new BasicDBObject("feedUrl",
-				"http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml").append("used",
-				0);
+				"http://0.tqn.com/6/g/sbinfocanada/b/rss2.xml");
 		rssColl.insert(rssFeed);
 
-		DBObject feed = rssColl.findOne(queryFeedsUsed);
+		DBObject feed = rssColl.findOne();
 
 		if (feed != null) {
 			RSSDelegateWorker.sendMessage(feed, rssColl, msgProd, sess);

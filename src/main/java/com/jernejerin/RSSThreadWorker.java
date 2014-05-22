@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -26,10 +27,11 @@ import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.NoHttpResponseException;
 import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
@@ -58,27 +60,26 @@ import com.sun.syndication.io.XmlReader;
  * @since 2014-05-06
  */
 public class RSSThreadWorker implements Runnable {
-	private final static String USER_AGENT = "Mozilla/5.0 Firefox/26.0";
+	private static final String USER_AGENT = "Mozilla/5.0 Firefox/26.0";
 
 	// logger for this class
-	static Logger logger = Logger.getLogger(RSSThreadWorker.class);
-
-	// name of the queue from whom we will be receiving messages
-	private static final String SUBJECT = "RSSFEEDSQUEUE";
+	private static final Logger LOG = Logger.getLogger(RSSThreadWorker.class);
 
 	private Message msg;
 	private DBObject feedDB;
 	private DBCollection rssColl;
 	private DBCollection entriesColl;
 	private Connection conn;
+	private String subject;
 
 	public RSSThreadWorker(Message msg, DBObject feedDB, DBCollection rssColl,
-			DBCollection entriesColl, Connection conn) {
+			DBCollection entriesColl, Connection conn, String subject) {
 		this.msg = msg;
 		this.feedDB = feedDB;
 		this.rssColl = rssColl;
 		this.entriesColl = entriesColl;
 		this.conn = conn;
+		this.subject = subject;
 	}
 
 	/**
@@ -88,7 +89,7 @@ public class RSSThreadWorker implements Runnable {
 	public void run() {
 		Properties props = new Properties();
 		try {
-			// configure logger
+			// configure LOG
 			props.load(new FileInputStream("log4j.properties"));
 			PropertyConfigurator.configure(props);
 
@@ -97,7 +98,7 @@ public class RSSThreadWorker implements Runnable {
 			SyndFeed feed = readFeed((String) feedDB.get("feedUrl"), input);
 
 			if (feed != null) {
-				logger.info("Successfully read feed " + feedDB.get("feedUrl"));
+				LOG.info("Successfully read feed " + feedDB.get("feedUrl"));
 				// update the feed information
 				feedUpdate(feedDB, feed);
 
@@ -129,26 +130,26 @@ public class RSSThreadWorker implements Runnable {
 						new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
 						feedDB);
 			} else
-				logger.info("Problem with reading feed "
+				LOG.info("Problem with reading feed "
 						+ feedDB.get("feedUrl"));
 		} catch (FileNotFoundException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (SecurityException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (IllegalArgumentException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (InterruptedException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (MalformedURLException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (ParsingFeedException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (FeedException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (IOException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (Exception ex) {
-			logger.fatal(ex.getMessage());
+			LOG.fatal(ex.getMessage());
 		} finally {
 			/*
 			 * Put it back to the queue because Session and MessageProducer are
@@ -160,29 +161,32 @@ public class RSSThreadWorker implements Runnable {
 			try {
 				// create a non-transactional session for sending messages
 				sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
-	
+
 				// destination is our queue on JMS
-				Destination dest = sess.createQueue(SUBJECT);
-	
+				Destination dest = sess.createQueue(subject);
+
 				// producer for sending messages
 				msgProd = sess.createProducer(dest);
-				
+
 				// send feed in the message to the queue
 				TextMessage txtMsg = sess.createTextMessage(feedDB.toString());
 				msgProd.send(txtMsg);
-				logger.info("Message sent from thread '" + txtMsg.getText() + "'");
-				
-				// now we can acknowledge that the message was successfully received
-				// this happens when the same message is successfully sent back into queue
+				LOG.info("Message sent from thread '" + txtMsg.getText()
+						+ "'");
+
+				// now we can acknowledge that the message was successfully
+				// received
+				// this happens when the same message is successfully sent back
+				// into queue
 				msg.acknowledge();
 			} catch (JMSException e) {
-				logger.fatal(e.getMessage());
+				LOG.fatal(e.getMessage());
 			} finally {
 				try {
 					sess.close();
 					msgProd.close();
 				} catch (JMSException e) {
-					logger.fatal(e.getMessage());
+					LOG.fatal(e.getMessage());
 				}
 			}
 		}
@@ -199,7 +203,14 @@ public class RSSThreadWorker implements Runnable {
 	 */
 	public static SyndFeed readFeed(String url, SyndFeedInput input)
 			throws Exception {
-		CloseableHttpClient httpClient = HttpClients.createDefault();
+		// set various timeout to 30s
+		RequestConfig requestConfig = RequestConfig.custom()
+				.setConnectTimeout(30 * 1000)
+				.setConnectionRequestTimeout(30 * 1000)
+				.setSocketTimeout(30 * 1000)
+				.build();
+		CloseableHttpClient httpClient = HttpClientBuilder.create()
+				.setDefaultRequestConfig(requestConfig).build();
 		SyndFeed feed = null;
 		try {
 			HttpGet request;
@@ -209,6 +220,7 @@ public class RSSThreadWorker implements Runnable {
 			try {
 				URI feedUrl = new URI(url);
 				request = new HttpGet(feedUrl.toString());
+				request.setConfig(requestConfig);
 			} catch (NullPointerException ex) {
 				throw new Exception(ex);
 			} catch (URISyntaxException ex) {
@@ -233,21 +245,23 @@ public class RSSThreadWorker implements Runnable {
 				HttpEntity entity = response.getEntity();
 
 				// build feed from entity content
-				if (entity != null)
-					feed = input.build(new XmlReader(entity.getContent()));
+				if (entity != null) {
+					InputStream stream = entity.getContent();
+					feed = input.build(new XmlReader(stream));
+				}
 			} finally {
 				response.close();
 			}
 		} catch (IllegalStateException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (FeedException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (NoHttpResponseException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (ClientProtocolException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (IOException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} finally {
 			httpClient.close();
 		}
@@ -392,17 +406,25 @@ public class RSSThreadWorker implements Runnable {
 	 * @throws IOException
 	 */
 	private String fetchWebPage(SyndEntry entry) {
-		CloseableHttpClient httpclient = HttpClients.createDefault();
+		// set various timeout to 30s
+		RequestConfig requestConfig = RequestConfig.custom()
+				.setConnectTimeout(30 * 1000)
+				.setConnectionRequestTimeout(30 * 1000)
+				.setSocketTimeout(30 * 1000)
+				.build();
+		CloseableHttpClient httpClient = HttpClientBuilder.create()
+				.setDefaultRequestConfig(requestConfig).build();
 		String webPage = null;
 		try {
 			if (entry.getLink() != null) {
 				URI uri = new URI(entry.getLink());
 				HttpGet httpGet = new HttpGet(uri.toString());
+				httpGet.setConfig(requestConfig);
 
 				// add header for simulating browser request as some
 				// web servers block automatic querying
 				httpGet.addHeader(HttpHeaders.USER_AGENT, USER_AGENT);
-				CloseableHttpResponse response = httpclient.execute(httpGet);
+				CloseableHttpResponse response = httpClient.execute(httpGet);
 
 				try {
 					// entity from response
@@ -425,20 +447,20 @@ public class RSSThreadWorker implements Runnable {
 				}
 			}
 		} catch (URISyntaxException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (IllegalArgumentException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (NoHttpResponseException e) {
 			e.printStackTrace();
 		} catch (ClientProtocolException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} catch (IOException e) {
-			logger.error(e.getMessage());
+			LOG.error(e.getMessage());
 		} finally {
 			try {
-				httpclient.close();
+				httpClient.close();
 			} catch (IOException e) {
-				logger.error(e.getMessage());
+				LOG.error(e.getMessage());
 			}
 		}
 

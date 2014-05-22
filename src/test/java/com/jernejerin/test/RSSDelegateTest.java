@@ -82,7 +82,7 @@ public class RSSDelegateTest {
 
 			// connection to JMS server
 			ConnectionFactory connFac = new ActiveMQConnectionFactory(
-					RSSDelegateWorker.URL);
+					RSSDelegateWorker.hostBroker);
 			conn = connFac.createConnection();
 			conn.start();
 

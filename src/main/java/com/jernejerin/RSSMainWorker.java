@@ -19,6 +19,11 @@ import org.apache.activemq.ActiveMQConnection;
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.ActiveMQSession;
 import org.apache.activemq.Message;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
@@ -39,18 +44,33 @@ import com.mongodb.util.JSON;
  * @since 2014-05-06
  */
 public class RSSMainWorker {
-	// queue size or number of active threads. Can be passed as argument.
-	public static int threadsNum = 50;
+	
+	/** The default database's host address. */
+	private static String hostDB = "localhost";
 
-	// default broker URL which means that JMS server is
-	// on localhost
-	private static final String URL = ActiveMQConnection.DEFAULT_BROKER_URL;
+	/** The default port on which the database is running. */
+	private static int portDB = 27017;
 
-	// name of the queue from whom we will be receiving messages
-	private static final String SUBJECT = "RSSFEEDSQUEUE";
+	/** The name of the database to use. */
+	private static String dbName = "rssdb";
 
-	// logger for this class
-	static Logger logger = Logger.getLogger(RSSMainWorker.class);
+	/** The name of the collection to use. */
+	private static String collNameFeeds = "feeds";
+	
+	/** The name of the collection to use. */
+	private static String collNameEntries = "entries";
+
+	/** The URL of the broker. */
+	private static String hostBroker = ActiveMQConnection.DEFAULT_BROKER_URL;
+
+	/** Name of the queue to whom we will be sending messages */
+	private static String subject = "RSSFEEDSQUEUE";
+	
+	/** Queue size or number of active threads. Defaultu is 50. */
+	private static int threadsNum = 50;
+
+	// LOG for this class
+	private static final Logger LOG = Logger.getLogger(RSSMainWorker.class);
 
 	/**
 	 * Checks for available threads and messages from queue in infinite loop.
@@ -63,28 +83,62 @@ public class RSSMainWorker {
 		MongoClient mongoClient = null;
 		Connection conn = null;
 		try {
-			// configure logger
+			// configure LOG
 			props.load(new FileInputStream("log4j.properties"));
 			PropertyConfigurator.configure(props);
+			
+			// create Options object
+			Options options = new Options();
 
-			if (args.length > 0)
-				threadsNum = Integer.parseInt(args[0]);
+			// add options
+			options.addOption("hostDB", true, "database's host address");
+			options.addOption("portDB", true,
+					"port on which the database is running");
+			options.addOption("dbName", true, "the name of the database to use");
+			options.addOption("collNameFeeds", true, "the name of collection to use for feeds");
+			options.addOption("collNameEntries", true, "the name of collection to use for entries");
+			options.addOption("hostBroker", true,
+					"the URL of the broker");
+			options.addOption("subject", true,
+					"name of the queue");
+			options.addOption("threadsNum", true, "number of active threads");
+
+			// parser for command line arguments
+			CommandLineParser parser = new GnuParser();
+			CommandLine cmd = parser.parse(options, args);
+
+			if (cmd.getOptionValue("hostDB") != null)
+				hostDB = cmd.getOptionValue("hostDB");
+			if (cmd.getOptionValue("portDB") != null)
+				portDB = Integer.parseInt(cmd.getOptionValue("portDB"));
+			if (cmd.getOptionValue("dbName") != null)
+				dbName = cmd.getOptionValue("dbName");
+			if (cmd.getOptionValue("collNameFeeds") != null)
+				collNameFeeds = cmd.getOptionValue("collNameFeeds");
+			if (cmd.getOptionValue("collNameEntries") != null)
+				collNameEntries = cmd.getOptionValue("collNameEntries");
+			if (cmd.getOptionValue("hostBroker") != null)
+				hostBroker = cmd.getOptionValue("hostBroker");
+			if (cmd.getOptionValue("subject") != null)
+				subject = cmd.getOptionValue("subject");
+			if (cmd.getOptionValue("threadsNum") != null)
+				threadsNum = Integer.parseInt(cmd.getOptionValue("threadsNum"));
 
 			// we only need one instance of these classes for MongoDB
 			// even with multiple threads -> thread safe
-			mongoClient = new MongoClient("localhost", 27017);
-			DB rssDB = mongoClient.getDB("rssdb");
-			DBCollection rssColl = rssDB.getCollection("feeds");
-			DBCollection entriesColl = rssDB.getCollection("entries");
-			logger.info("Created connection to MongoDB.");
+			mongoClient = new MongoClient(hostDB, portDB);
+			DB rssDB = mongoClient.getDB(dbName);
+			DBCollection rssColl = rssDB.getCollection(collNameFeeds);
+			DBCollection entriesColl = rssDB.getCollection(collNameEntries);
+			LOG.info("Created connection to MongoDB.");
 
 			// connection to JMS server. ConnectionFactory and Connection are
 			// thread safe!
 			ActiveMQConnectionFactory connFac = new ActiveMQConnectionFactory(
-					URL);
+					hostBroker);
 			conn = connFac.createConnection();
 			conn.start();
-			logger.info("Created connection to ActiveMQ.");
+			LOG.info("Created connection to ActiveMQ.");
 
 			// create a non-transactional session for sending messages with
 			// client acknowledge. We need none JMS compatible acknowledge, i.e.
@@ -93,7 +147,7 @@ public class RSSMainWorker {
 					ActiveMQSession.INDIVIDUAL_ACKNOWLEDGE);
 
 			// destination is our queue on JMS
-			Destination dest = sess.createQueue(SUBJECT);
+			Destination dest = sess.createQueue(subject);
 
 			// consumer for receiving messages
 			MessageConsumer msgCons = sess.createConsumer(dest);
@@ -108,11 +162,11 @@ public class RSSMainWorker {
 			while (true) {
 				// create maximum of specified threads
 				if (executor.getActiveCount() < threadsNum) {
-					logger.info("New thread available.");
+					LOG.info("New thread available.");
 					// get the available RSS feed from the message queue
 					// this call is blocking!
 					Message msg = (Message) msgCons.receive();
-					logger.info("Received new job from queue.");
+					LOG.info("Received new job from queue.");
 
 					if (msg instanceof TextMessage) {
 						TextMessage txtMsg = (TextMessage) msg;
@@ -123,29 +177,31 @@ public class RSSMainWorker {
 
 						// start thread for given RSS feed
 						Runnable rssThreadWorker = new RSSThreadWorker(msg, feedDB,
-								rssColl, entriesColl, conn);
+								rssColl, entriesColl, conn, subject);
 						executor.execute(rssThreadWorker);
-						logger.info("New thread started for feed "
+						LOG.info("New thread started for feed "
 								+ feedDB.get("feedUrl"));
 					}
 				}
 			}
 		} catch (UnknownHostException e) {
-			logger.fatal("Problem with database host: " + e.getMessage());
+			LOG.fatal("Problem with database host: " + e.getMessage());
 		} catch (MongoException e) {
-			logger.fatal("General Mongo problem: " + e.getMessage());
+			LOG.fatal("General Mongo problem: " + e.getMessage());
 		} catch (IllegalThreadStateException e) {
-			logger.fatal("Problem with threading: " + e.getMessage());
+			LOG.fatal("Problem with threading: " + e.getMessage());
 		} catch (JMSException e) {
-			logger.fatal("Problem with JMS: " + e.getMessage());
+			LOG.fatal("Problem with JMS: " + e.getMessage());
 		} catch (FileNotFoundException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
 		} catch (IOException e) {
-			logger.fatal(e.getMessage());
+			LOG.fatal(e.getMessage());
+		} catch (ParseException e) {
+			LOG.fatal(e.getMessage());
 		} finally {
 			conn.close();
 			mongoClient.close();
-			logger.info("Closed connection to MongoDB and ActiveMQ");
+			LOG.info("Closed connection to MongoDB and ActiveMQ");
 		}
 	}
 }

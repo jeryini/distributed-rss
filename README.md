@@ -41,12 +41,15 @@ The general solution consists of **three** JAR files:
 * *RSSDelegateWorker*: For inserting jobs (feeds) into message queue and checking for stalled jobs.
 * *RSSMainWorker*: For running thread workers which fetch entries of feeds, fetch the web page and persist it to the MongoDB. The main worker deques the job from message queue and allocates a new thread from thread pool for each feed. The thread worker then does the rest of the job.
 
+### MongoDB schema
+TODO
+
 ### Running
 A quick tutorial for running the solution.
 
 1. First run the InsertResources jar:
    ```java
-   java -jar InsertResources
+   java -jar InsertResources.jar
    ```
 
    The program accepts the following arguments:
@@ -61,7 +64,13 @@ A quick tutorial for running the solution.
    ```
    
    If the user does not pass any arguments then the following default values are used:
-   
+   ```
+   collName = "feeds"
+   dbName = "rssdb"
+   filePath = "./10K-RSS-feeds.csv"
+   host = "localhost"
+   port = 27017
+   ```
 
 2. Then run RSSDelegateWorker jar:
    ```java
@@ -82,6 +91,15 @@ A quick tutorial for running the solution.
    ```
    
    If the user does not pass any arguments then the following default values are used:
+   ```
+   checkInterval = 24 * 60 * 60
+   collName = "feeds"
+   dbName = "rssdb"
+   hostBroker = "failover://tcp://localhost:61616"
+   hostDB = "localhost"
+   port = 27017
+   subject = "RSSFEEDSQUEUE"
+   ```
 
 3. And finally the main worker RSSMainWorker jar:
    ```java
@@ -103,9 +121,20 @@ A quick tutorial for running the solution.
    ```
    
    If the user does not pass any arguments then the following default values are used:
+   ```
+   collNameEntries = "entries"
+   collNameFeeds = "feeds"
+   dbName = "rssdb"
+   hostBroker = "failover://tcp://localhost:61616"
+   hostDB = "localhost"
+   portDB = 27017
+   subject = "RSSFEEDSQUEUE"
+   threadsNum = 10
+   ```
    
    Of course one can run **multiple main workers**.
    
 ## TODO
-
+* Implement check for simmilarity between id's of entries of given feed using Levensthein distance.
+* If similarity between id's is not found then also check for similarity between full page content using Jaccard distance.
 

@@ -1,12 +1,13 @@
 # Distributed RSS
-Distributed system for reading RSS/Atom feeds. The system reads feeds, parses them and saves new entries into database. It also pulls the full content of the entry into database. The system is horizontally scalable (workers and multiple threads per worker) and resiliant to partial outages (using message broker).
+Distributed system for **reading RSS/Atom feeds**. The system reads feeds, parses them and saves new entries into database. It also pulls the full content of the entry into database. The system is *horizontally scalable* (workers and multiple threads per worker) and *resiliant to partial outages* (using message broker).
 
 ## Purpose
-This project was done for a challenge which was organised by [Zemanta](http://www.zemanta.com) and [Faculty of Computer and Information Science](http://www.fri.uni-lj.si/en/), [University of Ljubljana](http://www.uni-lj.si/eng/). More about this challenge on [official Zemanta page](http://www.zemanta.com/blog/zemantas-programming-challenge-2014-zemantin-programerski-izziv-2014/) and on (faculty page)[http://www.fri.uni-lj.si/si/raziskave/studentski_izzivi/zemantin_izziv/].
+This project was done for a challenge which was organised by [Zemanta](http://www.zemanta.com) and [Faculty of Computer and Information Science](http://www.fri.uni-lj.si/en/), [University of Ljubljana](http://www.uni-lj.si/eng/). More about this challenge on [official Zemanta page](http://www.zemanta.com/blog/zemantas-programming-challenge-2014-zemantin-programerski-izziv-2014/) and on [faculty page](http://www.fri.uni-lj.si/si/raziskave/studentski_izzivi/zemantin_izziv/).
 
 ## General Requirements
-This solution requires the following systems:
-
+This solution **requires** the following systems:
+* [Java SE Runtime Environment 7](http://www.oracle.com/technetwork/java/javase/downloads/jre7-downloads-1880261.html)
+ The logic of the system is written in JAVA programming language.
 * [MongoDB](http://www.mongodb.org/)
  The MongoDB database for storing feeds and entries. **Version 2.4.9**
 * [Apache ActiveMQ](http://activemq.apache.org/)
@@ -35,10 +36,10 @@ Support for efficent encoders (e.g. SHA-1 digest util).
 API for parsing command line options.
 
 ## General solution
-The general solution consists of three JAR files:
-* InsertResources: For inserting RSS feeds from CSV file into MongoDB.
-* RSSDelegateWorker: For inserting jobs into message queue and checking for stalled jobs.
-* RSSMainWorker: For running thread workers which fetch entries of feeds, fetch the web page and persist it to the MongoDB.
+The general solution consists of **three** JAR files:
+* *InsertResources*: For inserting RSS feeds from CSV file into MongoDB. The CSV file consists of URLs of feeds.
+* *RSSDelegateWorker*: For inserting jobs (feeds) into message queue and checking for stalled jobs.
+* *RSSMainWorker*: For running thread workers which fetch entries of feeds, fetch the web page and persist it to the MongoDB. The main worker deques the job from message queue and allocates a new thread from thread pool for each feed. The thread worker then does the rest of the job.
 
 ### Running
 A quick tutorial for running the solution.
@@ -48,7 +49,7 @@ A quick tutorial for running the solution.
    java -jar InsertResources
    ```
 
-   The program accepts the following parameters:
+   The program accepts the following arguments:
    ```
    usage: java -jar InsertResources
     -collName <arg>   the name of collection to use
@@ -58,13 +59,16 @@ A quick tutorial for running the solution.
     -host <arg>       database's host address
     -port <arg>       port on which the database is running
    ```
+   
+   If the user does not pass any arguments then the following default values are used:
+   
 
 2. Then run RSSDelegateWorker jar:
    ```java
    java -jar RSSDelegateWorker
    ```
 
-   The program accepts the following parameters:
+   The program accepts the following arguments:
    ```
    usage: java -jar RSSDelegateWorker
     -checkInterval <arg>   time in seconds for checking stalled feeds
@@ -76,13 +80,15 @@ A quick tutorial for running the solution.
     -portDB <arg>          port on which the database is running
     -subject <arg>         name of the queue
    ```
+   
+   If the user does not pass any arguments then the following default values are used:
 
 3. And finally the main worker RSSMainWorker jar:
    ```java
    java -jar RSSMainWorker
    ```
 
-   The program accepts the following parameters:
+   The program accepts the following arguments:
    ```
    usage: java -jar RSSMainWorker
     -collNameEntries <arg>   the name of collection to use for entries
@@ -96,7 +102,9 @@ A quick tutorial for running the solution.
     -threadsNum <arg>        number of active threads
    ```
    
-   Ofcourse one can run multiple main workers.
+   If the user does not pass any arguments then the following default values are used:
+   
+   Of course one can run **multiple main workers**.
    
 ## TODO
 

@@ -31,14 +31,15 @@ Support for efficent encoders (e.g. SHA-1 digest util).
 * [Commons CLI](http://commons.apache.org/proper/commons-cli/)
 API for parsing command line options.
 
-#### General solution
+## General solution
 The general solution consists of three JAR files:
 * InsertResources: For inserting RSS feeds from CSV file into MongoDB.
 * RSSDelegateWorker: For inserting jobs into message queue and checking for stalled jobs.
 * RSSMainWorker: For running thread workers which fetch entries of feeds, fetch the web page and persist it to the MongoDB.
 
-##### Running
+### Running
 A quick tutorial for running the solution.
+
 1. First run the InsertResources jar:
 ```java
 java -jar InsertResources

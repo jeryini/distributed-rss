@@ -1,5 +1,5 @@
 # Distributed RSS
-Distributed system for reading RSS feeds.
+Distributed system for reading RSS feeds. This project was done for a challenge which was organised by [Zemanta](http://www.zemanta.com) and [Faculty of Computer and Information Science](http://www.fri.uni-lj.si/en/), [University of Ljubljana](http://www.uni-lj.si/eng/). 
 
 ## General Requirements
 This solution requires the following systems:

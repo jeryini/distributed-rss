@@ -66,7 +66,7 @@ public class RSSMainWorker {
 	/** Name of the queue to whom we will be sending messages */
 	private static String subject = "RSSFEEDSQUEUE";
 	
-	/** Queue size or number of active threads. Defaultu is 50. */
+	/** Queue size or number of active threads. Default is 50. */
 	private static int threadsNum = 50;
 
 	// LOG for this class
@@ -163,6 +163,7 @@ public class RSSMainWorker {
 				// create maximum of specified threads
 				if (executor.getActiveCount() < threadsNum) {
 					LOG.info("New thread available.");
+					
 					// get the available RSS feed from the message queue
 					// this call is blocking!
 					Message msg = (Message) msgCons.receive();

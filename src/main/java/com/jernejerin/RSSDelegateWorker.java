@@ -63,9 +63,9 @@ public class RSSDelegateWorker {
 	 * The time for checking for feeds that have not been accessed in seconds.
 	 * This depends on number of VM and threads per VM. If we have a lot of
 	 * powerful VM, than this number should be lower. If it is not passed as
-	 * argument then default time of 120min.
+	 * argument then default time of 24h.
 	 */
-	public static int checkInterval = 120 * 60;
+	public static int checkInterval = 24 * 60 * 60;
 
 	/** Logger for this class. */
 	private static final Logger LOG = Logger.getLogger(RSSDelegateWorker.class);

@@ -115,23 +115,10 @@ public class RSSThreadWorker implements Runnable {
 				if (idList == null)
 					idList = new ArrayList<String>();
 
-				// get new entries
-				ArrayList<DBObject> entriesDBNew = getNewEntries(feed, idList);
-
-				// set reference to feed
-				feedDB.put("entries", idList);
-
-				// bulk insert new entries
-				entriesColl.insert(entriesDBNew);
-
-				// update feed which can contain new references to entries
-				// and updated feed information
-				rssColl.update(
-						new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
-						feedDB);
+				// get new entries and save them
+				getNewEntries(feed, idList);
 			} else
-				LOG.info("Problem with reading feed "
-						+ feedDB.get("feedUrl"));
+				LOG.info("Problem with reading feed " + feedDB.get("feedUrl"));
 		} catch (FileNotFoundException e) {
 			LOG.fatal(e.getMessage());
 		} catch (SecurityException e) {
@@ -171,8 +158,7 @@ public class RSSThreadWorker implements Runnable {
 				// send feed in the message to the queue
 				TextMessage txtMsg = sess.createTextMessage(feedDB.toString());
 				msgProd.send(txtMsg);
-				LOG.info("Message sent from thread '" + txtMsg.getText()
-						+ "'");
+				LOG.info("Message sent from thread '" + txtMsg.getText() + "'");
 
 				// now we can acknowledge that the message was successfully
 				// received
@@ -207,8 +193,7 @@ public class RSSThreadWorker implements Runnable {
 		RequestConfig requestConfig = RequestConfig.custom()
 				.setConnectTimeout(30 * 1000)
 				.setConnectionRequestTimeout(30 * 1000)
-				.setSocketTimeout(30 * 1000)
-				.build();
+				.setSocketTimeout(30 * 1000).build();
 		CloseableHttpClient httpClient = HttpClientBuilder.create()
 				.setDefaultRequestConfig(requestConfig).build();
 		SyndFeed feed = null;
@@ -278,13 +263,24 @@ public class RSSThreadWorker implements Runnable {
 	 * @throws NoSuchAlgorithmException
 	 */
 	@SuppressWarnings("unchecked")
-	private ArrayList<DBObject> getNewEntries(SyndFeed feed,
+	private void getNewEntries(SyndFeed feed,
 			ArrayList<String> idList) throws IOException {
+		DBObject findQuery = new BasicDBObject("feedUrl", feedDB.get("feedUrl"));
+		ArrayList<SyndEntry> entries = (ArrayList<SyndEntry>) feed.getEntries();
+		ArrayList<String> idListNew = new ArrayList<String>();
+		
+		// depending on size of entries for this feed use bulk insert or normal
+		// insert. We use bulk insert with feeds that have less then or equal
+		// 1000 entries.
+		boolean bulkInsert = true, newEntries = false;
+		if (entries.size() > 1000)
+			bulkInsert = false;
+
 		// current local entries for this feed use NORMALIZED data models using
 		// One-To-Many Relationships. Reason:
 		// http://blog.mongolab.com/2013/04/thinking-about-arrays-in-mongodb/
 		ArrayList<DBObject> entriesDBNew = new ArrayList<DBObject>();
-		for (SyndEntry entry : (ArrayList<SyndEntry>) feed.getEntries()) {
+		for (SyndEntry entry : entries) {
 			/*
 			 * All elements of an item are optional, however at least one of
 			 * title or description must be present. But we CANNOT TRUST USER
@@ -321,11 +317,20 @@ public class RSSThreadWorker implements Runnable {
 				String idHash = DigestUtils.sha1Hex(id);
 
 				if (!idList.contains(idHash)) {
+					// TODO: Check for simmilarity between other id's of other
+					// entries using Levensthein distance.
+
+					// TODO: If similarity between id's is not found then also
+					// check for similarity between full page content using Jaccard
+					// distance.
+
 					// does not exist yet, save it to DB we cannot set it to _id
 					// (ObjectId) as it only supports 24hex or 96bits where the
 					// SHA-1 produces 160bits hash
 					BasicDBObject entryDBNew = new BasicDBObject("idHash",
 							idHash);
+					// save raw id for computing similarity
+					entryDBNew.append("idRaw", id);
 
 					if (entry.getTitle() != null)
 						entryDBNew.append("title", entry.getTitle());
@@ -384,17 +389,40 @@ public class RSSThreadWorker implements Runnable {
 					if (entry.getPublishedDate() != null)
 						entryDBNew.append("pubDate", entry.getPublishedDate());
 					// source does not exist in rome library
+					newEntries = true;
+					
+					// depending on type of insert
+					if (bulkInsert) {
+						// insert new entry into list
+						entriesDBNew.add(entryDBNew);
+	
+						// add id to old list and new list
+						idList.add(idHash);
+						idListNew.add(idHash);
+					} else {
+						// large feed or lots of entries. Do a normal insert for each entry.
+						// insert new entry
+						entriesColl.insert(entryDBNew);
 
-					// insert new entry into list
-					entriesDBNew.add(entryDBNew);
-
-					// add id to list
-					idList.add(idHash);
+						// push new hash id into entries for current feed
+						DBObject newHash = new BasicDBObject("entries", idHash);
+						DBObject updateQuery = new BasicDBObject("$push", newHash);
+						rssColl.update(findQuery, updateQuery);
+					}
 				}
 			}
 		}
-
-		return entriesDBNew;
+		
+		if (bulkInsert && newEntries) {
+			// bulk insert new entries
+			entriesColl.insert(entriesDBNew);
+			
+			// push all new references to entries
+			DBObject idHashes = new BasicDBObject("$each", idListNew);
+			DBObject each = new BasicDBObject("entries", idHashes);
+			DBObject updateQuery = new BasicDBObject("$push", each);
+			rssColl.update(findQuery, updateQuery);
+		}
 	}
 
 	/**
@@ -410,8 +438,7 @@ public class RSSThreadWorker implements Runnable {
 		RequestConfig requestConfig = RequestConfig.custom()
 				.setConnectTimeout(30 * 1000)
 				.setConnectionRequestTimeout(30 * 1000)
-				.setSocketTimeout(30 * 1000)
-				.build();
+				.setSocketTimeout(30 * 1000).build();
 		CloseableHttpClient httpClient = HttpClientBuilder.create()
 				.setDefaultRequestConfig(requestConfig).build();
 		String webPage = null;
@@ -537,6 +564,9 @@ public class RSSThreadWorker implements Runnable {
 		// text input does not exist in rome library
 		// skip hours does not exist in rome library
 		// skip days does not exist in rome library
+
+		rssColl.update(new BasicDBObject("feedUrl", feedDB.get("feedUrl")),
+				feedDB);
 	}
 
 	/**

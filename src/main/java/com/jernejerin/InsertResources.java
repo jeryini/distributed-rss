@@ -11,6 +11,7 @@ import java.util.Properties;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
@@ -67,6 +68,7 @@ public class InsertResources {
 			Options options = new Options();
 
 			// add options
+			options.addOption("help", false, "help for usage");
 			options.addOption("host", true, "database's host address");
 			options.addOption("port", true,
 					"port on which the database is running");
@@ -78,7 +80,12 @@ public class InsertResources {
 			// parser for command line arguments
 			CommandLineParser parser = new GnuParser();
 			CommandLine cmd = parser.parse(options, args);
-
+			
+			if (cmd.hasOption("help")) {
+				HelpFormatter help = new HelpFormatter();
+				help.printHelp("java -jar InsertResources", options);
+				System.exit(-1);
+			}
 			if (cmd.getOptionValue("host") != null)
 				host = cmd.getOptionValue("host");
 			if (cmd.getOptionValue("port") != null)

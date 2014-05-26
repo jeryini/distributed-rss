@@ -68,6 +68,7 @@ Even though MongoDB is a schemaless database we can get a sense of application's
    ```
 2. Collection **entries**:
    ```json
+
    { "_id" : { "key" : "_id" }, "value" : { "type" : "ObjectId" }, "totalOccurrences" : 529155, "percentContaining" : 100 }
    { "_id" : { "key" : "idHash" }, "value" : { "type" : "String" }, "totalOccurrences" : 529155, "percentContaining" : 100 }
    { "_id" : { "key" : "idRaw" }, "value" : { "type" : "String" }, "totalOccurrences" : 529155, "percentContaining" : 100 }

@@ -22,6 +22,7 @@ import org.apache.activemq.Message;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
@@ -66,8 +67,8 @@ public class RSSMainWorker {
 	/** Name of the queue to whom we will be sending messages */
 	private static String subject = "RSSFEEDSQUEUE";
 	
-	/** Queue size or number of active threads. Default is 50. */
-	private static int threadsNum = 50;
+	/** Queue size or number of active threads. Default is 10. */
+	private static int threadsNum = 10;
 
 	// LOG for this class
 	private static final Logger LOG = Logger.getLogger(RSSMainWorker.class);
@@ -91,6 +92,7 @@ public class RSSMainWorker {
 			Options options = new Options();
 
 			// add options
+			options.addOption("help", false, "help for usage");
 			options.addOption("hostDB", true, "database's host address");
 			options.addOption("portDB", true,
 					"port on which the database is running");
@@ -106,7 +108,12 @@ public class RSSMainWorker {
 			// parser for command line arguments
 			CommandLineParser parser = new GnuParser();
 			CommandLine cmd = parser.parse(options, args);
-
+			
+			if (cmd.hasOption("help")) {
+				HelpFormatter help = new HelpFormatter();
+				help.printHelp("java -jar RSSMainWorker", options);
+				System.exit(-1);
+			}
 			if (cmd.getOptionValue("hostDB") != null)
 				hostDB = cmd.getOptionValue("hostDB");
 			if (cmd.getOptionValue("portDB") != null)

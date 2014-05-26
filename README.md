@@ -45,7 +45,7 @@ The general solution consists of **three** JAR files:
 TODO
 
 ### Running
-A quick tutorial for running the solution.
+A quick tutorial for running the solution. The compiled solution (jar files) can be found at the target/jar directory.
 
 1. First run the InsertResources jar:
    ```java

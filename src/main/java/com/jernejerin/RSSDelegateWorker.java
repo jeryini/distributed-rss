@@ -14,6 +14,7 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
@@ -90,6 +91,7 @@ public class RSSDelegateWorker {
 			Options options = new Options();
 
 			// add options
+			options.addOption("help", false, "help for usage");
 			options.addOption("hostDB", true, "database's host address");
 			options.addOption("portDB", true,
 					"port on which the database is running");
@@ -105,7 +107,12 @@ public class RSSDelegateWorker {
 			// parser for command line arguments
 			CommandLineParser parser = new GnuParser();
 			CommandLine cmd = parser.parse(options, args);
-
+			
+			if (cmd.hasOption("help")) {
+				HelpFormatter help = new HelpFormatter();
+				help.printHelp("java -jar RSSDelegateWorker", options);
+				System.exit(-1);
+			}
 			if (cmd.getOptionValue("hostDB") != null)
 				hostDB = cmd.getOptionValue("hostDB");
 			if (cmd.getOptionValue("portDB") != null)

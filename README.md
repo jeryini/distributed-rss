@@ -44,7 +44,7 @@ The general solution consists of **three** JAR files:
 ### MongoDB schema
 Even though MongoDB is a schemaless database we can get a sense of application's schema, as well as any outliers to that schema using Variety, a Schema Analyzer for MongoDB.
 
-1. Collection feeds:
+1. Collection **feeds**:
    ```json
    { "_id" : { "key" : "_id" }, "value" : { "type" : "ObjectId" }, "totalOccurrences" : 10000, "percentContaining" : 100 }
    { "_id" : { "key" : "accessedAt" }, "value" : { "type" : "Date" }, "totalOccurrences" : 10000, "percentContaining" : 100 }
@@ -66,7 +66,29 @@ Even though MongoDB is a schemaless database we can get a sense of application's
    { "_id" : { "key" : "image.description" }, "value" : { "type" : "String" }, "totalOccurrences" : 89, "percentContaining" : 0.89 }
 
    ```
-2. Collection entries:
+2. Collection **entries**:
+   ```json
+   { "_id" : { "key" : "_id" }, "value" : { "type" : "ObjectId" }, "totalOccurrences" : 529155, "percentContaining" : 100 }
+   { "_id" : { "key" : "idHash" }, "value" : { "type" : "String" }, "totalOccurrences" : 529155, "percentContaining" : 100 }
+   { "_id" : { "key" : "idRaw" }, "value" : { "type" : "String" }, "totalOccurrences" : 529155, "percentContaining" : 100 }
+   { "_id" : { "key" : "title" }, "value" : { "type" : "String" }, "totalOccurrences" : 529147, "percentContaining" : 99.99848815564437 }
+   { "_id" : { "key" : "guid" }, "value" : { "type" : "String" }, "totalOccurrences" : 529146, "percentContaining" : 99.99829917509993 }
+   { "_id" : { "key" : "link" }, "value" : { "type" : "String" }, "totalOccurrences" : 529126, "percentContaining" : 99.99451956421086 }
+   { "_id" : { "key" : "fullContent" }, "value" : { "type" : "String" }, "totalOccurrences" : 529126, "percentContaining" : 99.99451956421086 }
+   { "_id" : { "key" : "description" }, "value" : { "type" : "String" }, "totalOccurrences" : 505082, "percentContaining" : 95.45067135338417 }
+   { "_id" : { "key" : "pubDate" }, "value" : { "type" : "Date" }, "totalOccurrences" : 494181, "percentContaining" : 93.39059443830257 }
+   { "_id" : { "key" : "categories" }, "value" : { "type" : "Array" }, "totalOccurrences" : 296759, "percentContaining" : 56.08167739131257 }
+   { "_id" : { "key" : "categories.XX.name" }, "value" : { "type" : "String" }, "totalOccurrences" : 296759, "percentContaining" : 56.08167739131257 }
+   { "_id" : { "key" : "categories.XX.taxonomyURI" }, "value" : { "type" : "String" }, "totalOccurrences" : 50579, "percentContaining" : 9.558446957885685 }
+   { "_id" : { "key" : "enclosure" }, "value" : { "type" : "Array" }, "totalOccurrences" : 32798, "percentContaining" : 6.198183896967807 }
+   { "_id" : { "key" : "enclosure.XX.url" }, "value" : { "type" : "String" }, "totalOccurrences" : 32671, "percentContaining" : 6.174183367822283 }
+   { "_id" : { "key" : "authors" }, "value" : { "type" : "Array" }, "totalOccurrences" : 32309, "percentContaining" : 6.1057724107303155 }
+   { "_id" : { "key" : "authors.XX.name" }, "value" : { "type" : "String" }, "totalOccurrences" : 32239, "percentContaining" : 6.092543772618609 }
+   { "_id" : { "key" : "enclosure.XX.type" }, "value" : { "type" : "String" }, "totalOccurrences" : 30018, "percentContaining" : 5.67281798338861 }
+   { "_id" : { "key" : "enclosure.XX.length" }, "value" : { "type" : "Object" }, "totalOccurrences" : 19670, "percentContaining" : 3.7172473093894984 }
+   { "_id" : { "key" : "enclosure.XX.length.floatApprox" }, "value" : { "type" : "Number" }, "totalOccurrences" : 19670, "percentContaining" : 3.7172473093894984 }
+   { "_id" : { "key" : "authors.XX.uri" }, "value" : { "type" : "String" }, "totalOccurrences" : 19495, "percentContaining" : 3.684175714110232 }
+   ```
 
 ### Running
 A quick tutorial for running the solution. The compiled solution (jar files) can be found at the target/jar directory.
@@ -78,7 +100,7 @@ A quick tutorial for running the solution. The compiled solution (jar files) can
 
    The program accepts the following arguments:
    ```
-   usage: java -jar InsertResources
+   usage: java -jar InsertResources.jar
     -collName <arg>   the name of collection to use
     -dbName <arg>     the name of the database to use
     -filePath <arg>   the path of the file with RSS feeds
@@ -98,12 +120,12 @@ A quick tutorial for running the solution. The compiled solution (jar files) can
 
 2. Then run RSSDelegateWorker jar:
    ```java
-   java -jar RSSDelegateWorker
+   java -jar RSSDelegateWorker.jar
    ```
 
    The program accepts the following arguments:
    ```
-   usage: java -jar RSSDelegateWorker
+   usage: java -jar RSSDelegateWorker.jar
     -checkInterval <arg>   time in seconds for checking stalled feeds
     -collName <arg>        the name of collection to use
     -dbName <arg>          the name of the database to use
@@ -127,12 +149,12 @@ A quick tutorial for running the solution. The compiled solution (jar files) can
 
 3. And finally the main worker RSSMainWorker jar:
    ```java
-   java -jar RSSMainWorker
+   java -jar RSSMainWorker.jar
    ```
 
    The program accepts the following arguments:
    ```
-   usage: java -jar RSSMainWorker
+   usage: java -jar RSSMainWorker.jar
     -collNameEntries <arg>   the name of collection to use for entries
     -collNameFeeds <arg>     the name of collection to use for feeds
     -dbName <arg>            the name of the database to use

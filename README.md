@@ -42,7 +42,31 @@ The general solution consists of **three** JAR files:
 * *RSSMainWorker*: For running thread workers which fetch entries of feeds, fetch the web page and persist it to the MongoDB. The main worker deques the job from message queue and allocates a new thread from thread pool for each feed. The thread worker then does the rest of the job.
 
 ### MongoDB schema
-TODO
+Even though MongoDB is a schemaless database we can get a sense of application's schema, as well as any outliers to that schema using Variety, a Schema Analyzer for MongoDB.
+
+1. Collection feeds:
+   ```json
+   { "_id" : { "key" : "_id" }, "value" : { "type" : "ObjectId" }, "totalOccurrences" : 10000, "percentContaining" : 100 }
+   { "_id" : { "key" : "accessedAt" }, "value" : { "type" : "Date" }, "totalOccurrences" : 10000, "percentContaining" : 100 }
+   { "_id" : { "key" : "feedUrl" }, "value" : { "type" : "String" }, "totalOccurrences" : 10000, "percentContaining" : 100 }
+   { "_id" : { "key" : "title" }, "value" : { "type" : "String" }, "totalOccurrences" : 9308, "percentContaining" : 93.08 }
+   { "_id" : { "key" : "entries" }, "value" : { "type" : "Array" }, "totalOccurrences" : 9293, "percentContaining" : 92.93 }
+   { "_id" : { "key" : "link" }, "value" : { "type" : "String" }, "totalOccurrences" : 9282, "percentContaining" : 92.82000000000001}
+   { "_id" : { "key" : "description" }, "value" : { "type" : "String" }, "totalOccurrences" : 9189, "percentContaining" : 91.89 }
+   { "_id" : { "key" : "pubDate" }, "value" : { "type" : "Date" }, "totalOccurrences" : 8205, "percentContaining" : 82.05 }
+   { "_id" : { "key" : "language" }, "value" : { "type" : "String" }, "totalOccurrences" : 8003, "percentContaining" : 80.03 }
+   { "_id" : { "key" : "image" }, "value" : { "type" : "Object" }, "totalOccurrences" : 4129, "percentContaining" : 41.29 }
+   { "_id" : { "key" : "image.url" }, "value" : { "type" : "String" }, "totalOccurrences" : 4129, "percentContaining" : 41.29 }
+   { "_id" : { "key" : "image.link" }, "value" : { "type" : "String" }, "totalOccurrences" : 4117, "percentContaining" : 41.17 }
+   { "_id" : { "key" : "image.title" }, "value" : { "type" : "String" }, "totalOccurrences" : 4113, "percentContaining" : 41.13 }
+   { "_id" : { "key" : "copyright" }, "value" : { "type" : "String" }, "totalOccurrences" : 930, "percentContaining" : 9.3 }
+   { "_id" : { "key" : "authors" }, "value" : { "type" : "Array" }, "totalOccurrences" : 592, "percentContaining" : 5.92 }
+   { "_id" : { "key" : "authors.XX.name" }, "value" : { "type" : "String" }, "totalOccurrences" : 591, "percentContaining" : 5.91 }
+   { "_id" : { "key" : "authors.XX.uri" }, "value" : { "type" : "String" }, "totalOccurrences" : 307, "percentContaining" : 3.0700000000000003 }
+   { "_id" : { "key" : "image.description" }, "value" : { "type" : "String" }, "totalOccurrences" : 89, "percentContaining" : 0.89 }
+
+   ```
+2. Collection entries:
 
 ### Running
 A quick tutorial for running the solution. The compiled solution (jar files) can be found at the target/jar directory.

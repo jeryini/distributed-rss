@@ -2,7 +2,7 @@
 Distributed system for **reading RSS/Atom feeds**. The system reads feeds, parses them and saves new entries into database. It also pulls the full content of the entry into database. The system is *horizontally scalable* (workers and multiple threads per worker) and *resiliant to partial outages* (using message broker).
 
 ## Purpose
-This project was done for a challenge which was organised by [Zemanta](http://www.zemanta.com) and [Faculty of Computer and Information Science](http://www.fri.uni-lj.si/en/), [University of Ljubljana](http://www.uni-lj.si/eng/). More about this challenge on [official Zemanta page](http://www.zemanta.com/blog/zemantas-programming-challenge-2014-zemantin-programerski-izziv-2014/) and on [faculty page](http://www.fri.uni-lj.si/si/raziskave/studentski_izzivi/zemantin_izziv/).
+This project was done for a challenge which was organised by [Zemanta](http://www.zemanta.com) and [Faculty of Computer and Information Science](http://www.fri.uni-lj.si/en/), [University of Ljubljana](http://www.uni-lj.si/eng/). More about this challenge on [official Zemanta page](http://www.zemanta.com/blog/zemantas-programming-challenge-2014-zemantin-programerski-izziv-2014/) and on [faculty page](http://www.fri.uni-lj.si/si/raziskave/studentski_izzivi/arhiv_izzivov/zemanta_2013/) (only in Slovenian language). The project was selected as the best solution in the category of distributed web page aggregation and has consequently won the challenge in that category ([news in English](http://www.fri.uni-lj.si/en/news/archive/17570/novica.html), [news in Slovenian](http://www.fri.uni-lj.si/si/novice_in_dogodki/arhiv/17561/novica.html)).
 
 ## General Requirements
 This solution **requires** the following systems:
